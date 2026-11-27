@@ -127,6 +127,16 @@ async function loadPlans() {
 }
 
 // ---- indicators/standards: official reference + user-imported (user rows override same code)
+const PRESET_MODELS = ["gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"];
+const modelOptions = (list, cur) => [...new Set([cur, ...list].filter(Boolean))].map((m) => `<option value="${esc(m)}" ${m === cur ? "selected" : ""}>${esc(m)}</option>`).join("");
+async function fetchModels() {
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-generate`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY }, body: JSON.stringify({ action: "list_models" }) });
+  const out = await res.json(); if (!res.ok) throw new Error(out.error || "ดึงรายชื่อโมเดลไม่สำเร็จ");
+  S.models = out.models.map((m) => m.replace(/^models\//, "")).filter((m) => /gemini/.test(m)).sort().reverse();
+  const sel = $("#sModel"); if (sel) sel.innerHTML = modelOptions(S.models, sel.value);
+  return S.models.length;
+}
 async function loadInds(curriculum, subject, grade) {
   const [a, b] = await Promise.all([
     sb.from("indicators").select("code,description,kind,standard_code").eq("curriculum_id", curriculum).eq("subject_id", subject).eq("grade", grade).order("code"),
@@ -468,7 +478,7 @@ function render5() {
       <label>ชื่อโรงเรียน<input id="sSchool" value="${esc(st.school_name ?? "")}"></label>
       <label>ชื่อครูผู้สอน<input id="sTeacher" value="${esc(st.teacher_name ?? "")}"></label>
       <label>ปีการศึกษา<input id="sYear" value="${esc(st.academic_year ?? "")}" placeholder="เช่น 2569"></label>
-      <label>โมเดล Gemini<input id="sModel" list="models" value="${esc(st.ai_model ?? "gemini-2.5-flash")}"><datalist id="models"></datalist></label>
+      <label>โมเดล Gemini<select id="sModel">${modelOptions(S.models ?? PRESET_MODELS, st.ai_model ?? "gemini-2.5-flash")}</select></label>
     </div>
     <div class="row" style="margin-top:10px"><button class="btn primary" data-act="s-save">บันทึกการตั้งค่า</button><button class="btn" data-act="s-models">ดึงรายชื่อโมเดลจากคีย์</button></div>
   </div>
@@ -693,17 +703,12 @@ const actions = {
     const row = { owner_id: S.user.id, school_name: $("#sSchool").value.trim(), teacher_name: $("#sTeacher").value.trim(), academic_year: $("#sYear").value.trim(), ai_model: $("#sModel").value.trim() || "gemini-2.5-flash", updated_at: new Date().toISOString() };
     S.settings = must(await sb.from("app_settings").upsert(row, { onConflict: "owner_id" }).select().single()); toast("บันทึกแล้ว", "ok");
   }),
-  "s-models": (b) => busy(b, async () => {
-    const { data: { session } } = await sb.auth.getSession();
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-generate`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY }, body: JSON.stringify({ action: "list_models" }) });
-    const out = await res.json(); if (!res.ok) throw new Error(out.error || "ดึงไม่สำเร็จ");
-    $("#models").innerHTML = out.models.map((m) => `<option value="${esc(m)}">`).join(""); toast(`พบ ${out.models.length} โมเดล แตะช่องโมเดลเพื่อเลือก`, "ok");
-  }),
+  "s-models": (b) => busy(b, async () => { const n = await fetchModels(); toast(`พบ ${n} โมเดลที่คีย์ของคุณใช้ได้ เลือกจากรายการแล้วกดบันทึก`, "ok"); }),
   "k-add": (b) => busy(b, async () => {
     const label = $("#kLabel").value.trim() || `คีย์ ${S.keys.length + 1}`, key = $("#kVal").value.trim();
     if (!key) throw new Error("วาง API key ก่อน");
     must(await sb.from("api_keys").insert({ label, api_key: key, priority: (S.keys.at(-1)?.priority ?? 0) + 10 }));
-    await reloadKeys(); toast("เพิ่มคีย์แล้ว", "ok");
+    await reloadKeys(); toast("เพิ่มคีย์แล้ว กำลังดึงรายชื่อโมเดล...", "ok"); try { const n = await fetchModels(); toast(`เพิ่มคีย์แล้ว พบ ${n} โมเดลให้เลือก`, "ok"); } catch (e) { toast("เพิ่มคีย์แล้ว แต่ดึงรายชื่อโมเดลไม่สำเร็จ: " + e.message, "err"); }
   }),
   "k-del": async (b) => { if (!confirm("ลบคีย์นี้?")) return; must(await sb.from("api_keys").delete().eq("id", b.dataset.id)); await reloadKeys(); },
   "k-toggle": async (b) => { const k = S.keys.find((x) => x.id === b.dataset.id); must(await sb.from("api_keys").update({ enabled: !k.enabled }).eq("id", k.id)); await reloadKeys(); },
