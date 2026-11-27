@@ -51,7 +51,12 @@ const saveSel = () => localStorage.setItem("lp_sel", JSON.stringify({ cs: S.cs?.
 
 // ---------- auth ----------
 async function boot() {
-  const { data } = await sb.auth.getSession();
+  let { data } = await sb.auth.getSession();
+  if (!data.session && sb.auth.signInAnonymously) {
+    const r = await sb.auth.signInAnonymously();
+    if (r.error) $("#authMsg").textContent = "เปิดระบบอัตโนมัติไม่สำเร็จ: " + r.error.message;
+    else data = r.data;
+  }
   await onSession(data.session);
   sb.auth.onAuthStateChange((_e, session) => { if ((session?.user?.id ?? null) !== (S.user?.id ?? null)) onSession(session); });
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
