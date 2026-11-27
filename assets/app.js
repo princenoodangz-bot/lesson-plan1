@@ -121,11 +121,54 @@ async function loadPlans() {
   S.plans = S.unit ? must(await sb.from("lesson_plans").select("*").eq("unit_id", S.unit.id).order("seq")).map((p) => ({ ...p, indicator_codes: p.indicator_codes ?? [], sections: p.sections ?? {} })) : [];
   if (!S.plans.find((p) => p.id === S.plan?.id)) S.plan = S.plans[0] ?? null;
 }
+
+// ---- indicators/standards: official reference + user-imported (user rows override same code)
+async function loadInds(curriculum, subject, grade) {
+  const [a, b] = await Promise.all([
+    sb.from("indicators").select("code,description,kind,standard_code").eq("curriculum_id", curriculum).eq("subject_id", subject).eq("grade", grade).order("code"),
+    sb.from("user_indicators").select("code,description,kind,standard_code").eq("curriculum_id", curriculum).eq("subject_id", subject).eq("grade", grade).order("code"),
+  ]);
+  const m = new Map(must(a).map((i) => [i.code, i])); must(b).forEach((i) => m.set(i.code, i));
+  return [...m.values()].sort((x, y) => x.code.localeCompare(y.code, "th", { numeric: true }));
+}
+async function loadStds(curriculum, subject) {
+  const [a, b] = await Promise.all([
+    sb.from("standards").select("standard_code,strand_no,strand_name,description").eq("curriculum_id", curriculum).eq("subject_id", subject),
+    sb.from("user_standards").select("standard_code,description").eq("curriculum_id", curriculum).eq("subject_id", subject),
+  ]);
+  const m = new Map(must(a).map((x) => [x.standard_code, x])); must(b).forEach((x) => m.set(x.standard_code, { ...m.get(x.standard_code), ...x }));
+  return [...m.values()];
+}
+// parse pasted curriculum text into standards + indicators for one grade
+function parseCurriculumText(text, grade) {
+  const T = "๐๑๒๓๔๕๖๗๘๙";
+  const lines = String(text).replace(/[๐-๙]/g, (d) => T.indexOf(d)).replace(/[\u200b\u00a0]/g, " ").split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const stds = new Map(), inds = []; let curStd = null, last = null;
+  const reStd = /^มาตรฐาน(?:การเรียนรู้)?(?:\s*ที่)?\s*([ก-ฮ])\s*(\d+)\s*\.\s*(\d+)\s*[:\-–]?\s*(.*)$/;
+  const reInd = /^(?:([ก-ฮ])\s*(\d+)\s*\.\s*(\d+)\s+)?ป\.?\s*(\d)\s*\/\s*(\d+)\s*[:\-–.]?\s*(.*)$/;
+  for (const l of lines) {
+    if (/^(ตัวชี้วัด|ผลการเรียนรู้|ชั้น|สาระที่\s*\d+.*|สาระการเรียนรู้แกนกลาง)$/.test(l)) { last = last?.code ? null : last; continue; }
+    let m = l.match(reStd);
+    if (m) { curStd = `${m[1]} ${m[2]}.${m[3]}`; if (!stds.has(curStd)) stds.set(curStd, m[4]); last = { std: curStd }; continue; }
+    m = l.match(reInd);
+    if (m) {
+      const std = m[1] ? `${m[1]} ${m[2]}.${m[3]}` : curStd;
+      if (Number(m[4]) !== grade || !std) { last = null; continue; }
+      let d = m[6], kind = null; const k = d.match(/\((ระหว่างทาง|ปลายทาง)\)\s*$/); if (k) { kind = k[1]; d = d.replace(k[0], "").trim(); }
+      last = { code: `${std} ป.${grade}/${m[5]}`, standard_code: std, description: d, kind }; inds.push(last); continue;
+    }
+    if (last?.code) last.description = (last.description + " " + l).trim();
+    else if (last?.std && stds.get(last.std) !== undefined) stds.set(last.std, (stds.get(last.std) + " " + l).trim());
+  }
+  inds.forEach((i) => { const k = i.description.match(/\((ระหว่างทาง|ปลายทาง)\)\s*$/); if (k) { i.kind = k[1]; i.description = i.description.replace(k[0], "").trim(); } });
+  const seen = new Set(), out = inds.filter((i) => !seen.has(i.code) && seen.add(i.code));
+  return { standards: [...stds].map(([standard_code, description]) => ({ standard_code, description })), indicators: out };
+}
+let IMP = null;
 async function indicatorsFor(cs) {
   if (!cs) return [];
   if (S.indCache[cs.id]) return S.indCache[cs.id];
-  const r = must(await sb.from("indicators").select("code,description,kind,standard_code")
-    .eq("curriculum_id", cs.curriculum_id).eq("subject_id", cs.subject_id).eq("grade", cs.grade).order("code"));
+  const r = await loadInds(cs.curriculum_id, cs.subject_id, cs.grade);
   return (S.indCache[cs.id] = r);
 }
 const csOfCourse = (c) => S.curStructs.find((x) => x.id === c?.curriculum_structure_id) ?? null;
@@ -185,6 +228,10 @@ function render1() {
     <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t1-load">ดึงมาตรฐานและตัวชี้วัด</button></div>
   </div>
   <div id="t1prev"></div>
+  <details class="card"><summary><b>นำเข้าตัวชี้วัดเอง</b> <span class="muted small">— สำหรับวิชา/ชั้น/หลักสูตรที่ยังไม่มีในระบบ</span></summary>
+    <p class="muted small">คัดลอกตัวชี้วัดจากเอกสารหลักสูตรทางการหรือเอกสารของโรงเรียน (เลือกวิชา หลักสูตร ชั้น ด้านบนก่อน) มาวาง ระบบอ่านบรรทัดรูปแบบ "มาตรฐาน พ 1.1 ..." และ "ป.5/1 ..." ให้ แล้วให้ตรวจก่อนบันทึก</p>
+    <textarea id="impText" rows="8" placeholder="มาตรฐาน ท 1.1 ใช้กระบวนการอ่าน...&#10;ป.5/1 อ่านออกเสียงบทร้อยแก้ว..."></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn" data-act="imp-parse">แปลงและตรวจ</button><button class="btn primary" data-act="imp-save">บันทึกลงระบบ</button></div><div id="impPrev" class="small" style="margin-top:8px"></div></details>
   <div class="card"><h3>โครงสร้างหลักสูตรที่บันทึกไว้</h3><div id="t1list" class="list"></div></div>`;
   $("#t1s").value = T1.subject; $("#t1c").value = T1.curriculum; $("#t1g").value = T1.grade;
   ["t1s", "t1c", "t1g"].forEach((id) => $("#" + id).addEventListener("change", () => {
@@ -203,7 +250,7 @@ function renderT1Prev() {
   const box = $("#t1prev"); if (!box || !T1.ind) return;
   if (!T1.ind.length) {
     box.innerHTML = `<div class="card"><b>ยังไม่มีข้อมูลตัวชี้วัดของ ${esc(subjName(T1.subject))} ป.${T1.grade} (${esc(T1.curriculum)}) ในระบบ</b>
-      <p class="muted">ต้องนำเข้าจากหลักสูตรทางการก่อน ระบบจึงจะสร้างโครงสร้างได้ ตอนนี้มีข้อมูลสุขศึกษาและพลศึกษา ป.1-6 (หลักสูตร 2551 ปรับปรุง 2560)</p></div>`;
+      <p class="muted">ต้องนำเข้าก่อนจึงจะสร้างโครงสร้างได้ ใช้ช่อง “นำเข้าตัวชี้วัดเอง” ด้านล่าง (วางข้อความจากเอกสารหลักสูตร) ตอนนี้มีข้อมูลสำเร็จรูปเฉพาะสุขศึกษาและพลศึกษา ป.1-6 หลักสูตร 2551 ปรับปรุง 2560</p></div>`;
     return;
   }
   const by = {}; T1.ind.forEach((i) => (by[i.standard_code] ??= []).push(i));
@@ -445,12 +492,25 @@ const actions = {
   goto: (b) => go(b.dataset.tab),
 
   // ---- tab 1
+  "imp-parse": () => {
+    IMP = parseCurriculumText($("#impText").value, T1.grade);
+    $("#impPrev").innerHTML = IMP.indicators.length ? `<p>พบมาตรฐาน ${IMP.standards.length} ข้อ ตัวชี้วัด ป.${T1.grade} จำนวน ${IMP.indicators.length} ข้อ — ตรวจรายการ:</p><div class="tablewrap"><table>${IMP.indicators.map((i) => `<tr><td style="white-space:nowrap">${esc(i.code)}</td><td>${esc(i.description)}</td></tr>`).join("")}</table></div>` : '<p class="muted">ไม่พบตัวชี้วัดของชั้นนี้ในข้อความ ตรวจว่ามีบรรทัดขึ้นต้นด้วย "ป.5/1" และมีบรรทัด "มาตรฐาน ..." และเลือกชั้นตรงกัน</p>';
+  },
+  "imp-save": (b) => busy(b, async () => {
+    if (!IMP?.indicators.length) throw new Error("กด 'แปลงและตรวจ' ก่อน");
+    const base = { owner_id: S.user.id, curriculum_id: T1.curriculum, subject_id: T1.subject };
+    const stdRows = IMP.standards.map((x) => ({ ...base, standard_code: x.standard_code, description: x.description }));
+    const indRows = IMP.indicators.map((i) => ({ ...base, grade: T1.grade, standard_code: i.standard_code, code: i.code, description: i.description, kind: i.kind }));
+    if (stdRows.length) must(await sb.from("user_standards").upsert(stdRows, { onConflict: "owner_id,curriculum_id,subject_id,standard_code" }));
+    must(await sb.from("user_indicators").upsert(indRows, { onConflict: "owner_id,curriculum_id,subject_id,grade,code" }));
+    S.indCache = {}; IMP = null; $("#impPrev").innerHTML = ""; $("#impText").value = "";
+    toast(`บันทึกตัวชี้วัด ${indRows.length} ข้อแล้ว`, "ok");
+    T1.ind = await loadInds(T1.curriculum, T1.subject, T1.grade);
+    T1.std = Object.fromEntries((await loadStds(T1.curriculum, T1.subject)).map((x) => [x.standard_code, x])); renderT1Prev();
+  }),
   "t1-load": (b) => busy(b, async () => {
-    const [ind, std] = await Promise.all([
-      sb.from("indicators").select("code,description,kind,standard_code").eq("curriculum_id", T1.curriculum).eq("subject_id", T1.subject).eq("grade", T1.grade).order("code"),
-      sb.from("standards").select("standard_code,strand_no,strand_name,description").eq("curriculum_id", T1.curriculum).eq("subject_id", T1.subject),
-    ]);
-    T1.ind = must(ind); T1.std = Object.fromEntries(must(std).map((s) => [s.standard_code, s]));
+    T1.ind = await loadInds(T1.curriculum, T1.subject, T1.grade);
+    T1.std = Object.fromEntries((await loadStds(T1.curriculum, T1.subject)).map((x) => [x.standard_code, x]));
     renderT1Prev();
   }),
   "t1-save": (b) => busy(b, async () => {
@@ -730,7 +790,7 @@ async function savePlan() {
 }
 async function exportCtx() {
   const c = S.course, cs = csOfCourse(c), inds = await courseIndicators();
-  const stds = cs?.content?.standards ?? must(await sb.from("standards").select("*").eq("curriculum_id", c.curriculum_id).eq("subject_id", c.subject_id));
+  const stds = cs?.content?.standards ?? (await loadStds(c.curriculum_id, c.subject_id));
   return { school: S.settings?.school_name ?? "", teacher: S.settings?.teacher_name ?? "", year: S.settings?.academic_year ?? "", course: c, unit: S.unit, subject: subjName(c.subject_id), indicators: inds, standards: stds, thNum };
 }
 
