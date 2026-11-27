@@ -193,12 +193,13 @@ async function courseIndicators() {
 
 // ---------- navigation ----------
 function go(tab) {
+  if (S.tab === "t5" && tab !== "t5" && $("#pTitle")) { try { collectPlan(); autosavePlan(); } catch {} }
   S.tab = tab; saveSel();
   $$(".tab").forEach((t) => t.classList.toggle("active", t.id === tab));
   $$(".step").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   const c = S.course ? `${subjName(S.course.subject_id)} ป.${S.course.grade} · ${S.course.curriculum_id}` : S.cs ? `${subjName(S.cs.subject_id)} ป.${S.cs.grade} · ${S.cs.curriculum_id}` : "";
   $("#crumb").textContent = c;
-  ({ t1: render1, t2: render2, t3: render3, t4: render4, t5: render5, t6: render6 })[tab]();
+  ({ t1: render1, t2: render2, t3: render3, t4: render4, t5: render5, t6: render6, t7: render7 })[tab]();
 }
 $("#steps").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) go(b.dataset.tab); });
 
@@ -437,6 +438,19 @@ async function render5() {
   $("#t5p").addEventListener("change", async (e) => { await autosavePlan(); S.plan = S.plans.find((p) => p.id === e.target.value); render5(); });
   renderPlanEditor();
 }
+async function render6() {
+  const el = $("#t6");
+  if (!S.plans.length || !S.plan) { el.innerHTML = `<div class="card accent"><h2>6 · พรีวิวแผน</h2><p>ยังไม่มีแผนให้ดู สร้างหัวข้อที่แถบ 4 แล้วเขียนที่แถบ 5 ก่อน</p><button class="btn" data-act="goto" data-tab="t4">ไปแถบ 4</button></div>`; return; }
+  const idx = S.plans.findIndex((p) => p.id === S.plan.id);
+  const ctx = await exportCtx();
+  const { planPreviewHtml } = await import("./preview.js");
+  el.innerHTML = `<div class="card accent"><h2>6 · พรีวิวแผน <span class="muted small">— หน้าตาตามแผนต้นฉบับ 12 หัวข้อ</span></h2>
+    <div class="row"><label style="flex:1">แผน<select id="t6p">${S.plans.map((p) => `<option value="${p.id}">แผนที่ ${p.seq} ${planDone(p) ? "✓ " : ""}${esc(p.title)}</option>`).join("")}</select></label></div>
+    <div class="row" style="margin-top:10px"><button class="btn small" data-act="t6-prev" ${idx <= 0 ? "disabled" : ""}>← ก่อนหน้า</button><button class="btn small" data-act="t6-next" ${idx >= S.plans.length - 1 ? "disabled" : ""}>ถัดไป →</button><button class="btn small primary" data-act="t6-edit">แก้ไขแผนนี้</button><button class="btn small accent" data-act="t4-export">ส่งออก Word</button></div></div>
+    ${planPreviewHtml(ctx, S.plan)}`;
+  $("#t6p").value = S.plan.id;
+  $("#t6p").addEventListener("change", (e) => { S.plan = S.plans.find((p) => p.id === e.target.value); render6(); });
+}
 async function autosavePlan() { try { if (S.plan && $("#pTitle")) { collectPlan(); await savePlan(); } } catch (e) { toast("บันทึกอัตโนมัติไม่สำเร็จ: " + e.message, "err"); } }
 async function stepPlan(d) { await autosavePlan(); const i = S.plans.findIndex((p) => p.id === S.plan?.id) + d; if (S.plans[i]) { S.plan = S.plans[i]; await render5(); window.scrollTo?.(0, 0); } }
 async function renderPlanEditor() {
@@ -453,6 +467,7 @@ async function renderPlanEditor() {
   box.innerHTML = `<div class="card accent">
     <div class="row spread"><h3>แผนที่ ${p.seq}</h3><div class="row">
       <button class="btn small accent" data-act="t4-ai">ให้ AI ร่างแผนนี้</button>
+      <button class="btn small" data-act="t4-preview">ดูพรีวิว</button>
       <button class="btn small" data-act="t4-export">ส่งออก Word</button>
       <button class="btn small danger" data-act="t4-del">ลบ</button></div></div>
     <div class="grid" style="margin:10px 0">
@@ -486,7 +501,7 @@ async function renderPlanEditor() {
 // =====================================================================
 // TAB 5 — settings & API keys
 // =====================================================================
-function render6() {
+function render7() {
   const st = S.settings ?? {};
   $("#t5").innerHTML = `
   <div class="card accent"><h2>⚙ ตั้งค่า</h2>
@@ -649,6 +664,10 @@ const actions = {
     try { must(await sb.from("lesson_plans").delete().eq("id", b.dataset.id)); if (S.plan?.id === b.dataset.id) S.plan = null; await loadPlans(); render4(); } catch (e) { toast(e.message, "err"); }
   },
   "t4-check": (b) => busy(b, checkCourse),
+  "t6-prev": () => { const i = S.plans.findIndex((p) => p.id === S.plan?.id); if (S.plans[i - 1]) { S.plan = S.plans[i - 1]; render6(); } },
+  "t6-next": () => { const i = S.plans.findIndex((p) => p.id === S.plan?.id); if (S.plans[i + 1]) { S.plan = S.plans[i + 1]; render6(); } },
+  "t6-edit": () => go("t5"),
+  "t4-preview": () => go("t6"),
   "t5-prev": () => stepPlan(-1),
   "t5-next": () => stepPlan(1),
   "t4-save-next": (b) => busy(b, async () => { collectPlan(); await savePlan(); toast("บันทึกแผนแล้ว", "ok"); await stepPlan(1); }),
@@ -753,7 +772,7 @@ const actions = {
   "k-down": (b) => moveKey(b.dataset.id, 1),
 };
 async function reloadKeys() {
-  S.keys = must(await sb.from("api_keys").select("id,label,priority,enabled,exhausted_until,last_error,last_used_at,created_at").order("priority").order("created_at")); render6();
+  S.keys = must(await sb.from("api_keys").select("id,label,priority,enabled,exhausted_until,last_error,last_used_at,created_at").order("priority").order("created_at")); render7();
 }
 async function moveKey(id, d) {
   const i = S.keys.findIndex((k) => k.id === id), j = i + d; if (j < 0 || j >= S.keys.length) return;

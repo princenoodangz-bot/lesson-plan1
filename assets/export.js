@@ -58,7 +58,7 @@ export async function buildDoc(ctx, plans) {
     out.push(head(1, SECTIONS[0].title));
     stdCodes.forEach((sc) => out.push(body(`มาตรฐาน ${th(sc)}  ${stdOf(sc)?.description ?? ""}`, { left: cm(1.2) })));
     out.push(para("ตัวชี้วัด/ผลการเรียนรู้", { bold: true, indent: { firstLine: cm(1.27) } }));
-    inds.forEach((i) => out.push(body(`ตัวชี้วัด : ${th(i.code.replace(/^พ\s*\d\.\d\s*/, ""))} ${i.description}${i.kind ? ` (ตัวชี้วัด${i.kind})` : ""}`, { left: cm(1.2) })));
+    inds.forEach((i) => out.push(body(`ตัวชี้วัด : ${th(i.code.replace(/^\S+\s\d\.\d\s*/, ""))} ${i.description}${i.kind ? ` (ตัวชี้วัด${i.kind})` : ""}`, { left: cm(1.2) })));
 
     // 2
     out.push(head(2, SECTIONS[1].title));
