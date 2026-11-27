@@ -19,14 +19,14 @@ export async function buildDoc(ctx, plans) {
   const { TableLayoutType, TabStopType, LeaderType, LineRuleType, Document, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, HeadingLevel, TableOfContents, Footer, PageNumber, PageBreak, VerticalAlign } = D;
   const th = ctx.thNum;
 
-  const run = (text, o = {}) => new TextRun({ text, font: FONT, size: o.size ?? SZ, bold: o.bold, ...o.extra });
+  const run = (text, o = {}) => new TextRun({ text: th(text), font: FONT, size: o.size ?? SZ, bold: o.bold, italics: o.italics, color: o.color, underline: o.underline ? {} : undefined, ...o.extra });
   const para = (children, o = {}) => new Paragraph({
     children: typeof children === "string" ? [run(children, o)] : children,
     alignment: o.align ?? AlignmentType.LEFT,
     indent: o.indent, spacing: { line: o.line ?? 250, lineRule: LineRuleType.AUTO, before: o.before ?? 0, after: o.after ?? 0 },
     heading: o.heading, keepNext: o.keepNext, pageBreakBefore: o.pageBreakBefore,
   });
-  const head = (n, title) => para(`${n}. ${title}`, { bold: true, before: 80, keepNext: true });
+  const head = (n, title, o = {}) => para(`${n}. ${title}`, { bold: true, before: 80, keepNext: true, ...o });
   const sub = (text) => para(text, { bold: true, indent: { left: cm(1.27) }, keepNext: true });
   const body = (text, o = {}) => para(text, { align: AlignmentType.THAI_DISTRIBUTE, indent: { firstLine: cm(1.27), left: o.left ?? 0 }, ...o });
   const bullets = (txt, prefix) => lines(txt).map((l, i) => body(prefix === "num" ? `${i + 1}. ${stripNum(l)}` : prefix === "dash" ? `- ${stripNum(l)}` : l, { left: cm(0.6) }));
@@ -48,10 +48,11 @@ export async function buildDoc(ctx, plans) {
     const stdCodes = [...new Set(inds.map((i) => i.standard_code))];
     const stdOf = (sc) => ctx.standards.find((s) => s.standard_code === sc);
 
-    out.push(para("แผนการจัดการเรียนรู้", { bold: true, align: AlignmentType.CENTER, heading: ctx.multi ? HeadingLevel.HEADING_1 : undefined, pageBreakBefore: ctx.multi && idx > 0, line: 240 }));
-    out.push(para(`รายวิชา${ctx.subject}\t รหัสวิชา ${c.course_code ?? ""}   ชั้นประถมศึกษาปีที่ ${c.grade}`));
-    out.push(para(`หน่วยการเรียนรู้ที่ ${u.seq}\t เรื่อง ${u.name}\t เวลา ${u.hours} ชั่วโมง`));
-    out.push(para(`เรื่อง \t${plan.title}\t เวลา ${plan.hours} ชั่วโมง`));
+    out.push(para("แผนการจัดการเรียนรู้", { bold: true, underline: true, align: AlignmentType.CENTER, heading: ctx.multi ? HeadingLevel.HEADING_1 : undefined, pageBreakBefore: ctx.multi && idx > 0, line: 240 }));
+    const hrow = (l, m, r, midPos) => new Paragraph({ children: [run(l), run("\t"), run(m), run("\t"), run(r)], tabStops: [{ type: TabStopType.LEFT, position: cm(midPos) }, { type: TabStopType.RIGHT, position: cm(16.05) }], spacing: { line: 250, lineRule: LineRuleType.AUTO } });
+    out.push(hrow(`รายวิชา${ctx.subject}`, `รหัสวิชา ${c.course_code ?? ""}`, `ชั้นประถมศึกษาปีที่ ${c.grade}`, 7.2));
+    out.push(hrow(`หน่วยการเรียนรู้ที่ ${u.seq}`, `เรื่อง ${u.name}`, `เวลา ${u.hours} ชั่วโมง`, 4.6));
+    out.push(hrow("เรื่อง", plan.title, `เวลา ${plan.hours} ชั่วโมง`, 1.5));
     out.push(new Paragraph({ children: [run("\t")], tabStops: [{ type: TabStopType.RIGHT, position: cm(16.05), leader: LeaderType.DOT }], spacing: { line: 250, lineRule: LineRuleType.AUTO } }));
 
     // 1
@@ -93,21 +94,17 @@ export async function buildDoc(ctx, plans) {
 
     // 8
     out.push(head(8, SECTIONS[7].title));
-    const picked = (list, key) => (sec.focus?.[key] ?? []);
-    if (picked(R3, "r3").length) {
-      out.push(para("3Rs คือ", { bold: true, indent: { left: cm(1.2) } }));
-      picked(R3, "r3").forEach((t) => out.push(para([run("☑ ", { extra: { font: "Segoe UI Symbol" } }), run(t)], { indent: { left: cm(1.8) } })));
-    }
-    if (picked(C8, "c8").length) {
-      out.push(para("8Cs คือ", { bold: true, indent: { left: cm(1.2) } }));
-      picked(C8, "c8").forEach((t) => out.push(para([run("☑ ", { extra: { font: "Segoe UI Symbol" } }), run(t)], { indent: { left: cm(1.8) } })));
-    }
+    const box = (on) => run(on ? "☑ " : "☐ ", { extra: { font: "Segoe UI Symbol" } });
+    out.push(para("3Rs คือ", { bold: true, indent: { left: cm(1.2) } }));
+    R3.forEach((t) => out.push(para([box((sec.focus?.r3 ?? []).includes(t)), run(t)], { indent: { left: cm(1.8) } })));
+    out.push(para("8Cs คือ", { bold: true, indent: { left: cm(1.2) } }));
+    C8.forEach((t) => out.push(para([box((sec.focus?.c8 ?? []).includes(t)), run(t)], { indent: { left: cm(1.8) } })));
 
     // 9
     out.push(head(9, SECTIONS[8].title));
     PROCESS_STEPS.forEach((st, i) => {
-      out.push(para(st, { bold: true, keepNext: true }));
-      lines(sec.process?.[i]).forEach((l) => out.push(body(l, { left: cm(0.6) })));
+      out.push(para(st, { bold: true, underline: true, keepNext: true }));
+      lines(sec.process?.[i]).forEach((l) => out.push(/^\(?\s*ตัวอย่าง/.test(l.trim()) ? body(l, { left: cm(1.2), italics: true, color: "31849B" }) : body(l, { left: cm(0.6) })));
     });
 
     // 10
@@ -133,6 +130,37 @@ export async function buildDoc(ctx, plans) {
       return new TableRow({ cantSplit: true, children: [cell(itemParas, W[0]), cell(toParas(a.method), W[1]), cell(toParas(a.tool), W[2]), cell(toParas(a.criteria).map((p) => p), W[3])] });
     });
     out.push(new Table({ width: { size: cm(W.reduce((x, y) => x + y)), type: WidthType.DXA }, columnWidths: W.map(cm), rows: [hdr, ...rows], layout: TableLayoutType.FIXED }));
+    // 13 - post-teaching record
+    const dl = (label = "", left = 0) => new Paragraph({ children: [run(label), run("\t")], indent: { left: cm(left) }, tabStops: [{ type: TabStopType.RIGHT, position: cm(16.05), leader: LeaderType.DOT }], spacing: { line: 250, lineRule: LineRuleType.AUTO } });
+    const dots = "...............";
+    const sign = (role, name, extra) => {
+      out.push(para(`ลงชื่อ .........................................${role ? ` (${role})` : ""}`, { indent: { left: cm(7.6) }, before: 160 }));
+      out.push(para(`(${name || "........................................"})`, { indent: { left: cm(9.2) } }));
+      if (extra) out.push(para(extra, { indent: { left: cm(9.2) } }));
+      out.push(para("........../............../..........", { indent: { left: cm(9.2) } }));
+    };
+    out.push(head(13, "บันทึกหลังการสอน", { pageBreakBefore: true }));
+    out.push(para("13.1 ผลการเรียนรู้", { bold: true, indent: { left: cm(0.6) } }));
+    out.push(para(`1) นักเรียนที่ผ่านตัวชี้วัด  มีจำนวน ${dots} คน  คิดเป็นร้อยละ ${dots}`, { indent: { left: cm(1.2) } }));
+    out.push(para(`2) นักเรียนที่ไม่ผ่านตัวชี้วัด มีจำนวน ${dots} คน  คิดเป็นร้อยละ ${dots}`, { indent: { left: cm(1.2) } }));
+    out.push(para(`1. ${dots}${dots}${dots} สาเหตุ ${dots}${dots}${dots}`, { indent: { left: cm(1.8) } }));
+    out.push(para(`2. ${dots}${dots}${dots} สาเหตุ ${dots}${dots}${dots}`, { indent: { left: cm(1.8) } }));
+    out.push(dl("แนวทางแก้ปัญหา", 1.8));
+    out.push(dl("3) นักเรียนที่มีความสามารถพิเศษได้แก่", 1.2)); out.push(dl("แนวทางการพัฒนา / ส่งเสริม", 1.8));
+    out.push(dl("4) นักเรียนได้รับความรู้ (K)", 1.2));
+    out.push(dl("5) นักเรียนเกิดทักษะกระบวนการ (P)", 1.2));
+    out.push(dl("6) นักเรียนมีคุณธรรม จริยธรรม ค่านิยม (A)", 1.2));
+    out.push(para("13.2 ทักษะในศตวรรษที่ 21 ที่เน้นในแผนการจัดการเรียนรู้", { bold: true, indent: { left: cm(0.6) }, before: 80 }));
+    [...R3, ...C8].forEach((t) => out.push(dl(t, 1.2)));
+    out.push(para("13.3 ปัญหา/อุปสรรค (ถ้ามี)", { bold: true, indent: { left: cm(0.6) }, before: 80 })); out.push(dl()); out.push(dl());
+    out.push(para("13.4 แนวทางแก้ไข (ถ้ามี)", { bold: true, indent: { left: cm(0.6) }, before: 80 })); out.push(dl()); out.push(dl());
+    sign("ครูผู้สอน", ctx.teacher);
+    out.push(head(14, "ความเห็นผู้บริหาร/ผู้ที่ได้รับมอบหมาย", { before: 240 }));
+    const sch = ctx.school ?? "";
+    out.push(para("ความเห็นของรองผู้อำนวยการโรงเรียน", { bold: true, indent: { left: cm(0.6) } })); out.push(dl()); out.push(dl());
+    sign("", ctx.deputy, `รองผู้อำนวยการ${sch}`);
+    out.push(para("ความเห็นของผู้อำนวยการโรงเรียน", { bold: true, indent: { left: cm(0.6) }, before: 160 })); out.push(dl()); out.push(dl());
+    sign("", ctx.director, `ผู้อำนวยการ${sch}`);
     // attachments (worksheets / rubric)
     (sec.attachments ?? []).forEach((a, ai) => {
       if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim()) return;

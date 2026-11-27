@@ -1,5 +1,5 @@
 // Paper-style preview of one lesson plan, laid out like the school's original template (12 sections).
-import { SECTIONS, PROCESS_STEPS, SUFFICIENCY } from "./template.js";
+import { SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const lines = (v) => (Array.isArray(v) ? v : String(v ?? "").split(/\r?\n/)).map((l) => String(l).trim()).filter(Boolean);
@@ -16,12 +16,11 @@ export function planPreviewHtml(ctx, plan) {
   const P = (t, cls = "") => `<p class="${cls}">${nl(t)}</p>`;
   const L = (txt, fmt) => lines(txt).map((l, i) => P(fmt ? fmt(l, i) : l, "ind2")).join("");
   const out = [];
-  out.push(`<h3 class="c">แผนการจัดการเรียนรู้</h3>`);
-  const row = (a, b) => `<div class="hd"><span>${esc(a)}</span><span>${esc(b ?? "")}</span></div>`;
-  out.push(row(`รายวิชา${ctx.subject}`, `รหัสวิชา ${c.course_code || "........"}`));
-  out.push(`<p class="c">ชั้นประถมศึกษาปีที่ ${c.grade}</p>`);
-  out.push(row(`หน่วยการเรียนรู้ที่ ${u.seq}   เรื่อง ${u.name}`, `เวลา ${u.hours} ชั่วโมง`));
-  out.push(row(`เรื่อง ${plan.title}`, `เวลา ${plan.hours} ชั่วโมง`));
+  out.push(`<h3 class="c"><u>แผนการจัดการเรียนรู้</u></h3>`);
+  const row3 = (l, m, r, w) => `<div class="hd3"><span style="width:${w}">${esc(l)}</span><span class="mid">${esc(m)}</span><span class="r">${esc(r)}</span></div>`;
+  out.push(row3(`รายวิชา${ctx.subject}`, `รหัสวิชา ${c.course_code ?? ""}`, `ชั้นประถมศึกษาปีที่ ${c.grade}`, "40%"));
+  out.push(row3(`หน่วยการเรียนรู้ที่ ${u.seq}`, `เรื่อง ${u.name}`, `เวลา ${u.hours} ชั่วโมง`, "22%"));
+  out.push(row3("เรื่อง", plan.title, `เวลา ${plan.hours} ชั่วโมง`, "8%"));
   out.push(`<div class="dots"></div>`);
 
   out.push(H(1, SECTIONS[0].title));
@@ -51,12 +50,11 @@ export function planPreviewHtml(ctx, plan) {
   out.push(suf || `<p class="ph ind0">(ว่าง)</p>`);
 
   out.push(H(8, SECTIONS[7].title));
-  if ((sec.focus?.r3 ?? []).length) { out.push(`<p class="b ind1">3Rs คือ</p>`); sec.focus.r3.forEach((t) => out.push(P(`☑ ${t}`, "ind2"))); }
-  if ((sec.focus?.c8 ?? []).length) { out.push(`<p class="b ind1">8Cs คือ</p>`); sec.focus.c8.forEach((t) => out.push(P(`☑ ${t}`, "ind2"))); }
-  if (!(sec.focus?.r3 ?? []).length && !(sec.focus?.c8 ?? []).length) out.push(`<p class="ph ind1">(ยังไม่เลือก)</p>`);
+  out.push(`<p class="b ind1">3Rs คือ</p>`); R3.forEach((t) => out.push(P(`${(sec.focus?.r3 ?? []).includes(t) ? "☑" : "☐"} ${t}`, "ind2")));
+  out.push(`<p class="b ind1">8Cs คือ</p>`); C8.forEach((t) => out.push(P(`${(sec.focus?.c8 ?? []).includes(t) ? "☑" : "☐"} ${t}`, "ind2")));
 
   out.push(H(9, SECTIONS[8].title));
-  PROCESS_STEPS.forEach((st, i) => { out.push(`<p class="b">${esc(st)}</p>`); out.push(L(sec.process?.[i]) || `<p class="ph ind0">(ว่าง)</p>`); });
+  PROCESS_STEPS.forEach((st, i) => { out.push(`<p class="b"><u>${esc(st)}</u></p>`); out.push(lines(sec.process?.[i]).map((l) => P(l, /^\(?\s*ตัวอย่าง/.test(l.trim()) ? "ind2 ans" : "ind0")).join("") || `<p class="ph ind0">(ว่าง)</p>`); });
 
   out.push(H(10, SECTIONS[9].title)); out.push(L(sec.media, (l, i) => `${i + 1}. ${stripNum(l)}`) || `<p class="ph ind1">(ว่าง)</p>`);
 
@@ -73,9 +71,29 @@ export function planPreviewHtml(ctx, plan) {
     return `<tr><td><b>${esc(a.item)}</b>${k ? lines(sec.objectives?.[k]).map((l) => `<div>- ${esc(stripNum(l))}</div>`).join("") : ""}</td><td>${toCell(a.method)}</td><td>${toCell(a.tool)}</td><td>${toCell(a.criteria)}</td></tr>`;
   }).join("")}</table>`);
 
+  const dl = (t = "") => `<div class="dl"><span>${esc(t)}</span></div>`;
+  const dots = "...............";
+  const sign = (role, name, extra) => `<div class="sg"><p>ลงชื่อ .........................................${role ? ` (${esc(role)})` : ""}</p><p>(${esc(name || "........................................")})</p>${extra ? `<p>${esc(extra)}</p>` : ""}<p>........../............../..........</p></div>`;
+  out.push(`<div class="pgbreak"></div>`);
+  out.push(H(13, "บันทึกหลังการสอน"));
+  out.push(`<p class="b ind0">13.1 ผลการเรียนรู้</p>`);
+  out.push(P(`1) นักเรียนที่ผ่านตัวชี้วัด  มีจำนวน ${dots} คน  คิดเป็นร้อยละ ${dots}`, "ind1"));
+  out.push(P(`2) นักเรียนที่ไม่ผ่านตัวชี้วัด มีจำนวน ${dots} คน  คิดเป็นร้อยละ ${dots}`, "ind1"));
+  out.push(P(`1. ${dots}${dots} สาเหตุ ${dots}${dots}`, "ind2")); out.push(P(`2. ${dots}${dots} สาเหตุ ${dots}${dots}`, "ind2"));
+  out.push(dl("แนวทางแก้ปัญหา")); out.push(dl("3) นักเรียนที่มีความสามารถพิเศษได้แก่")); out.push(dl("แนวทางการพัฒนา / ส่งเสริม"));
+  out.push(dl("4) นักเรียนได้รับความรู้ (K)")); out.push(dl("5) นักเรียนเกิดทักษะกระบวนการ (P)")); out.push(dl("6) นักเรียนมีคุณธรรม จริยธรรม ค่านิยม (A)"));
+  out.push(`<p class="b ind0">13.2 ทักษะในศตวรรษที่ 21 ที่เน้นในแผนการจัดการเรียนรู้</p>`);
+  [...R3, ...C8].forEach((t) => out.push(dl(t)));
+  out.push(`<p class="b ind0">13.3 ปัญหา/อุปสรรค (ถ้ามี)</p>`, dl(), dl(), `<p class="b ind0">13.4 แนวทางแก้ไข (ถ้ามี)</p>`, dl(), dl());
+  out.push(sign("ครูผู้สอน", ctx.teacher));
+  out.push(H(14, "ความเห็นผู้บริหาร/ผู้ที่ได้รับมอบหมาย"));
+  out.push(`<p class="b ind0">ความเห็นของรองผู้อำนวยการโรงเรียน</p>`, dl(), dl(), sign("", ctx.deputy, `รองผู้อำนวยการ${ctx.school ?? ""}`));
+  out.push(`<p class="b ind0">ความเห็นของผู้อำนวยการโรงเรียน</p>`, dl(), dl(), sign("", ctx.director, `ผู้อำนวยการ${ctx.school ?? ""}`));
+
   (sec.attachments ?? []).forEach((a, i) => {
     if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim()) return;
     out.push(`<hr><h3 class="c">เอกสารแนบที่ ${i + 1} ${esc(a.title)}</h3>${lines(a.body).map((l) => P(l, "ind0")).join("")}`);
   });
-  return `<div class="paper">${out.join("")}</div>`;
+  const html = out.join("").replace(/>([^<]*)</g, (m, t) => ">" + th(t) + "<");
+  return `<div class="paper">${html}</div>`;
 }

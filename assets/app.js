@@ -508,6 +508,8 @@ function render7() {
     <div class="grid">
       <label>ชื่อโรงเรียน<input id="sSchool" value="${esc(st.school_name ?? "")}"></label>
       <label>ชื่อครูผู้สอน<input id="sTeacher" value="${esc(st.teacher_name ?? "")}"></label>
+      <label>ชื่อรองผู้อำนวยการ<input id="sDeputy" value="${esc(st.deputy_name ?? "")}"></label>
+      <label>ชื่อผู้อำนวยการ<input id="sDirector" value="${esc(st.director_name ?? "")}"></label>
       <label>ปีการศึกษา<input id="sYear" value="${esc(st.academic_year ?? "")}" placeholder="เช่น 2569"></label>
       <label>โมเดล Gemini<select id="sModel">${modelOptions(S.models ?? PRESET_MODELS, st.ai_model ?? "gemini-2.5-flash")}</select></label>
     </div>
@@ -755,7 +757,7 @@ const actions = {
     a.download = `lesson-plan-backup-${new Date().toISOString().slice(0, 10)}.json`; document.body.append(a); a.click(); a.remove(); toast("ดาวน์โหลดไฟล์สำรองแล้ว", "ok");
   }),
   "s-save": (b) => busy(b, async () => {
-    const row = { owner_id: S.user.id, school_name: $("#sSchool").value.trim(), teacher_name: $("#sTeacher").value.trim(), academic_year: $("#sYear").value.trim(), ai_model: $("#sModel").value.trim() || "gemini-2.5-flash", updated_at: new Date().toISOString() };
+    const row = { owner_id: S.user.id, school_name: $("#sSchool").value.trim(), teacher_name: $("#sTeacher").value.trim(), deputy_name: $("#sDeputy").value.trim(), director_name: $("#sDirector").value.trim(), academic_year: $("#sYear").value.trim(), ai_model: $("#sModel").value.trim() || "gemini-2.5-flash", updated_at: new Date().toISOString() };
     S.settings = must(await sb.from("app_settings").upsert(row, { onConflict: "owner_id" }).select().single()); toast("บันทึกแล้ว", "ok");
   }),
   "s-models": (b) => busy(b, async () => { const n = await fetchModels(); toast(`พบ ${n} โมเดลที่คีย์ของคุณใช้ได้ เลือกจากรายการแล้วกดบันทึก`, "ok"); }),
@@ -855,7 +857,7 @@ async function savePlan() {
 async function exportCtx() {
   const c = S.course, cs = csOfCourse(c), inds = await courseIndicators();
   const stds = cs?.content?.standards ?? (await loadStds(c.curriculum_id, c.subject_id));
-  return { school: S.settings?.school_name ?? "", teacher: S.settings?.teacher_name ?? "", year: S.settings?.academic_year ?? "", course: c, unit: S.unit, subject: subjName(c.subject_id), indicators: inds, standards: stds, thNum };
+  return { school: S.settings?.school_name ?? "", teacher: S.settings?.teacher_name ?? "", deputy: S.settings?.deputy_name ?? "", director: S.settings?.director_name ?? "", year: S.settings?.academic_year ?? "", course: c, unit: S.unit, subject: subjName(c.subject_id), indicators: inds, standards: stds, thNum };
 }
 
 // indicator picker modal
