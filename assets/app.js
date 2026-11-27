@@ -198,7 +198,7 @@ function go(tab) {
   $$(".step").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   const c = S.course ? `${subjName(S.course.subject_id)} ป.${S.course.grade} · ${S.course.curriculum_id}` : S.cs ? `${subjName(S.cs.subject_id)} ป.${S.cs.grade} · ${S.cs.curriculum_id}` : "";
   $("#crumb").textContent = c;
-  ({ t1: render1, t2: render2, t3: render3, t4: render4, t5: render5 })[tab]();
+  ({ t1: render1, t2: render2, t3: render3, t4: render4, t5: render5, t6: render6 })[tab]();
 }
 $("#steps").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) go(b.dataset.tab); });
 
@@ -393,7 +393,7 @@ async function renderT3Body() {
 const planDone = (p) => !!String(p.sections?.key_idea ?? "").trim();
 async function render4() {
   const el = $("#t4");
-  if (!S.units.length) { el.innerHTML = `<div class="card accent"><h2>4 · แผนการจัดการเรียนรู้รายคาบ</h2><p>ต้องมีหน่วยการเรียนรู้ในแถบ 3 ก่อน</p><button class="btn" data-act="goto" data-tab="t3">ไปแถบ 3</button></div>`; return; }
+  if (!S.units.length) { el.innerHTML = `<div class="card accent"><h2>4 · หัวข้อแผนรายคาบ (ร่างเรื่องคร่าวๆ ก่อน)</h2><p>ต้องมีหน่วยการเรียนรู้ในแถบ 3 ก่อน</p><button class="btn" data-act="goto" data-tab="t3">ไปแถบ 3</button></div>`; return; }
   let view = "table"; try { view = localStorage.getItem("lp_view") || "table"; } catch {}
   const unitOpts = S.units.map((u) => `<option value="${u.id}">หน่วยที่ ${u.seq} ${esc(u.name)} (${u.hours} ชม.)</option>`).join("");
   const ph = sum(S.plans.map((p) => num(p.hours)));
@@ -406,23 +406,39 @@ async function render4() {
       <td><div class="chips">${p.indicator_codes.map((c) => `<span class="chip">${esc(c.replace(/^\S+\s/, ""))}</span>`).join("")}</div></td>
       <td><input data-pid="${p.id}" data-pf="planned_date" type="date" value="${p.planned_date ?? ""}"></td>
       <td><select data-pid="${p.id}" data-pf="status"><option value="draft" ${p.status !== "reviewed" ? "selected" : ""}>${planDone(p) ? "ร่างแล้ว" : "ว่าง/ร่าง"}</option><option value="reviewed" ${p.status === "reviewed" ? "selected" : ""}>ตรวจแล้ว</option></select></td>
-      <td style="white-space:nowrap"><button class="btn small" data-act="t4-up" data-id="${p.id}" ${i === 0 ? "disabled" : ""}>↑</button> <button class="btn small" data-act="t4-down" data-id="${p.id}" ${i === S.plans.length - 1 ? "disabled" : ""}>↓</button> <button class="btn small primary" data-act="t4-pick" data-id="${p.id}">แก้ไข</button> <button class="btn small" data-act="t4-copy" data-id="${p.id}">คัดลอก</button> <button class="btn small danger" data-act="t4-del-id" data-id="${p.id}">ลบ</button></td></tr>`).join("") || '<tr><td colspan="7" class="muted">ยังไม่มีแผน</td></tr>'}
+      <td style="white-space:nowrap"><button class="btn small" data-act="t4-up" data-id="${p.id}" ${i === 0 ? "disabled" : ""}>↑</button> <button class="btn small" data-act="t4-down" data-id="${p.id}" ${i === S.plans.length - 1 ? "disabled" : ""}>↓</button> <button class="btn small primary" data-act="t4-pick" data-id="${p.id}">เขียนแผน →</button> <button class="btn small" data-act="t4-copy" data-id="${p.id}">คัดลอก</button> <button class="btn small danger" data-act="t4-del-id" data-id="${p.id}">ลบ</button></td></tr>`).join("") || '<tr><td colspan="7" class="muted">ยังไม่มีแผน</td></tr>'}
     <tr><td></td><td><b>รวม</b></td><td><b>${ph}/${S.unit.hours}</b></td><td colspan="4"></td></tr></table></div>`;
   const listHtml = `<div class="list">${S.plans.map((p) => `<details class="item" style="display:block"><summary style="cursor:pointer"><b>แผนที่ ${p.seq}</b> ${esc(p.title)} <span class="muted small">· ${p.hours} ชม. · ${stCls(p)}${p.planned_date ? " · " + p.planned_date : ""}</span></summary>
       <div class="small" style="margin-top:8px"><div class="chips">${p.indicator_codes.map((c) => `<span class="chip">${esc(c)}</span>`).join("")}</div>
       <p><b>สาระสำคัญ:</b> ${esc(p.sections?.key_idea || "-")}</p><p><b>จุดประสงค์:</b> ${esc([p.sections?.objectives?.K, p.sections?.objectives?.P, p.sections?.objectives?.A].filter(Boolean).join(" | ") || "-")}</p>
-      <div class="row"><button class="btn small primary" data-act="t4-pick" data-id="${p.id}">แก้ไข</button> <button class="btn small" data-act="t4-copy" data-id="${p.id}">คัดลอก</button> <button class="btn small danger" data-act="t4-del-id" data-id="${p.id}">ลบ</button></div></div></details>`).join("") || '<div class="muted">ยังไม่มีแผน</div>'}</div>`;
-  el.innerHTML = `<div class="card accent"><h2>4 · แผนการจัดการเรียนรู้รายคาบ</h2>
+      <div class="row"><button class="btn small primary" data-act="t4-pick" data-id="${p.id}">เขียนแผน →</button> <button class="btn small" data-act="t4-copy" data-id="${p.id}">คัดลอก</button> <button class="btn small danger" data-act="t4-del-id" data-id="${p.id}">ลบ</button></div></div></details>`).join("") || '<div class="muted">ยังไม่มีแผน</div>'}</div>`;
+  el.innerHTML = `<div class="card accent"><h2>4 · หัวข้อแผนรายคาบ (ร่างเรื่องคร่าวๆ ก่อน)</h2>
     <div class="row"><label style="flex:1">หน่วยการเรียนรู้<select id="t4u">${unitOpts}</select></label></div>
     <div class="check"><div class="stat ${ph === S.unit.hours ? "ok" : "bad"}"><span class="muted small">ชั่วโมงแผนรวม</span><b>${ph}/${S.unit.hours}</b></div><div class="stat"><span class="muted small">จำนวนแผน</span><b>${S.plans.length}</b></div><div class="stat"><span class="muted small">ร่างแล้ว</span><b>${S.plans.filter(planDone).length}/${S.plans.length}</b></div></div>
-    <div class="row" style="margin-top:10px"><button class="btn small primary" data-act="t4-add">+ เพิ่มแผน</button><button class="btn small accent" data-act="t4-ai-all">✨ AI สร้างแผนทั้งหน่วย</button><button class="btn small" data-act="t4-check">ตรวจความครบถ้วน</button><button class="btn small" data-act="t4-export-unit">ส่งออก Word ทั้งหน่วย</button></div></div>
+    <div class="row" style="margin-top:10px"><button class="btn small primary" data-act="t4-add">+ เพิ่มหัวข้อ</button><button class="btn small accent" data-act="t4-ai-titles">✨ AI วางหัวข้อทั้งหน่วย</button><button class="btn small" data-act="t4-check">ตรวจความครบถ้วน</button><button class="btn small" data-act="t4-export-unit">ส่งออก Word ทั้งหน่วย</button></div></div>
     <div class="card"><div class="row spread"><h3>แผนในหน่วยนี้</h3><div class="row"><button class="btn small ${view === "table" ? "primary" : ""}" data-act="t4-view" data-v="table">ตาราง</button><button class="btn small ${view === "list" ? "primary" : ""}" data-act="t4-view" data-v="list">รายการ</button></div></div>
       <div style="margin-top:8px">${view === "table" ? tableHtml : listHtml}</div></div>
-    <div id="t4edit"></div>`;
+`;
   $("#t4u").value = S.unit.id;
   $("#t4u").addEventListener("change", async (e) => { S.unit = S.units.find((u) => u.id === e.target.value); S.plan = null; await loadPlans(); saveSel(); render4(); });
+}
+async function render5() {
+  const el = $("#t5");
+  if (!S.units.length) { el.innerHTML = `<div class="card accent"><h2>5 · เขียนแผนรายคาบ</h2><p>ต้องมีหน่วยการเรียนรู้ในแถบ 3 ก่อน</p><button class="btn" data-act="goto" data-tab="t3">ไปแถบ 3</button></div>`; return; }
+  const unitOpts = S.units.map((u) => `<option value="${u.id}">หน่วยที่ ${u.seq} ${esc(u.name)} (${u.hours} ชม.)</option>`).join("");
+  const idx = S.plans.findIndex((p) => p.id === S.plan?.id);
+  el.innerHTML = `<div class="card accent"><h2>5 · เขียนแผนรายคาบ <span class="muted small">— ทีละแผน ทีละหน่วย</span></h2>
+    <div class="grid"><label>หน่วยการเรียนรู้<select id="t5u">${unitOpts}</select></label>
+    <label>แผน (หัวข้อจากแถบ 4)<select id="t5p">${S.plans.map((p) => `<option value="${p.id}">แผนที่ ${p.seq} ${planDone(p) ? "✓ " : ""}${esc(p.title)}</option>`).join("")}</select></label></div>
+    ${S.plans.length ? `<div class="row" style="margin-top:10px"><button class="btn small" data-act="t5-prev" ${idx <= 0 ? "disabled" : ""}>← แผนก่อนหน้า</button><span class="muted small">แผนที่ ${idx + 1}/${S.plans.length} · เขียนแล้ว ${S.plans.filter(planDone).length}</span><button class="btn small" data-act="t5-next" ${idx >= S.plans.length - 1 ? "disabled" : ""}>แผนถัดไป →</button></div>` : `<p class="muted">ยังไม่มีหัวข้อแผนในหน่วยนี้ ไปสร้างหัวข้อที่แถบ 4 ก่อน</p><button class="btn" data-act="goto" data-tab="t4">ไปแถบ 4</button>`}</div>
+    <div id="t4edit"></div>`;
+  $("#t5u").value = S.unit.id; if (S.plan) $("#t5p").value = S.plan.id;
+  $("#t5u").addEventListener("change", async (e) => { await autosavePlan(); S.unit = S.units.find((u) => u.id === e.target.value); S.plan = null; await loadPlans(); saveSel(); render5(); });
+  $("#t5p").addEventListener("change", async (e) => { await autosavePlan(); S.plan = S.plans.find((p) => p.id === e.target.value); render5(); });
   renderPlanEditor();
 }
+async function autosavePlan() { try { if (S.plan && $("#pTitle")) { collectPlan(); await savePlan(); } } catch (e) { toast("บันทึกอัตโนมัติไม่สำเร็จ: " + e.message, "err"); } }
+async function stepPlan(d) { await autosavePlan(); const i = S.plans.findIndex((p) => p.id === S.plan?.id) + d; if (S.plans[i]) { S.plan = S.plans[i]; await render5(); window.scrollTo?.(0, 0); } }
 async function renderPlanEditor() {
   const box = $("#t4edit"); if (!box) return;
   if (!S.plan) { box.innerHTML = '<div class="card muted">เลือกหรือเพิ่มแผนทางซ้าย</div>'; return; }
@@ -463,14 +479,14 @@ async function renderPlanEditor() {
     <details class="sec"><summary>13. เอกสารแนบ (ใบงาน / เกณฑ์รูบริก) <span class="muted small">— ต่อท้ายไฟล์ Word</span></summary><div class="body">
       ${(sec.attachments ?? []).map((a, i) => `<div class="card" style="padding:10px"><label>ชื่อเอกสาร<input data-p="attachments.${i}.title" value="${esc(a.title)}"></label><label>เนื้อหา<textarea data-p="attachments.${i}.body" rows="8">${esc(a.body)}</textarea></label><button class="btn small danger" data-act="t4-att-del" data-i="${i}">ลบเอกสารนี้</button></div>`).join("") || '<div class="muted">ยังไม่มีเอกสารแนบ</div>'}
       <div class="row"><button class="btn small" data-act="t4-att-add">+ เพิ่มเอกสารแนบ</button><button class="btn small accent" data-act="t4-att-ai">✨ AI ร่างใบงาน + รูบริก</button></div></div></details>
-    <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t4-save">บันทึกแผนนี้</button></div>
+    <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t4-save">บันทึกแผนนี้</button><button class="btn" data-act="t4-save-next">บันทึกและไปแผนถัดไป →</button></div>
   </div>`;
 }
 
 // =====================================================================
 // TAB 5 — settings & API keys
 // =====================================================================
-function render5() {
+function render6() {
   const st = S.settings ?? {};
   $("#t5").innerHTML = `
   <div class="card accent"><h2>⚙ ตั้งค่า</h2>
@@ -633,6 +649,26 @@ const actions = {
     try { must(await sb.from("lesson_plans").delete().eq("id", b.dataset.id)); if (S.plan?.id === b.dataset.id) S.plan = null; await loadPlans(); render4(); } catch (e) { toast(e.message, "err"); }
   },
   "t4-check": (b) => busy(b, checkCourse),
+  "t5-prev": () => stepPlan(-1),
+  "t5-next": () => stepPlan(1),
+  "t4-save-next": (b) => busy(b, async () => { collectPlan(); await savePlan(); toast("บันทึกแผนแล้ว", "ok"); await stepPlan(1); }),
+  "t4-ai-titles": (b) => busy(b, async () => {
+    const all = await courseIndicators(), c = S.course;
+    const unitInds = all.filter((i) => S.unit.indicator_codes.includes(i.code));
+    const have = sum(S.plans.map((p) => num(p.hours))), count = Math.max(0, Math.min(40, num(S.unit.hours) - have));
+    if (!count) throw new Error("ชั่วโมงแผนครบตามหน่วยแล้ว (เพิ่มชั่วโมงของหน่วยในแถบ 3 หรือลบหัวข้อก่อน)");
+    toast("AI กำลังวางหัวข้อแผน...");
+    const out = await callAI(promptPlanTitles({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, indicators: unitInds, count }));
+    const list = (out.plans ?? []).slice(0, count);
+    if (!list.length) throw new Error("AI ไม่ได้ส่งรายการหัวข้อกลับมา");
+    const valid = new Set(S.unit.indicator_codes);
+    let seq = S.plans.at(-1)?.seq ?? 0;
+    for (const it of list) {
+      const codes = (it.indicator_codes ?? []).filter((x) => valid.has(x));
+      must(await sb.from("lesson_plans").insert({ unit_id: S.unit.id, seq: ++seq, title: String(it.title ?? `แผนที่ ${seq}`), hours: 1, indicator_codes: codes.length ? codes : S.unit.indicator_codes, sections: emptySections() }));
+    }
+    await loadPlans(); render4(); toast(`วางหัวข้อ ${list.length} แผนแล้ว ตรวจและแก้ชื่อได้ในตาราง แล้วกด “เขียนแผน →”`, "ok");
+  }),
   "t4-ai-all": (b) => busy(b, async () => {
     const all = await courseIndicators(), c = S.course;
     const unitInds = all.filter((i) => S.unit.indicator_codes.includes(i.code));
@@ -676,17 +712,17 @@ const actions = {
     const add = (out.attachments ?? []).map((a) => ({ title: String(a.title ?? ""), body: Array.isArray(a.body) ? a.body.join("\n") : String(a.body ?? "") }));
     (S.plan.sections.attachments ??= []).push(...add); await savePlan(); renderPlanEditor(); toast("AI ร่างเอกสารแนบแล้ว", "ok");
   }),
-  "t4-pick": async (b) => { S.plan = S.plans.find((p) => p.id === b.dataset.id); await render4(); $("#t4edit")?.scrollIntoView?.({ behavior: "smooth" }); },
+  "t4-pick": (b) => { S.plan = S.plans.find((p) => p.id === b.dataset.id); go("t5"); },
   "t4-add": (b) => busy(b, async () => {
     const seq = (S.plans.at(-1)?.seq ?? 0) + 1;
     const row = must(await sb.from("lesson_plans").insert({ unit_id: S.unit.id, seq, title: "แผนใหม่", hours: 1, indicator_codes: S.unit.indicator_codes, sections: emptySections() }).select().single());
     await loadPlans(); S.plan = S.plans.find((p) => p.id === row.id); render4();
   }),
   "t4-ind": async () => pickIndicators((await courseIndicators()).filter((i) => S.unit.indicator_codes.includes(i.code)), S.plan.indicator_codes, (codes) => { collectPlan(); S.plan.indicator_codes = codes; renderPlanEditor(); }),
-  "t4-save": (b) => busy(b, async () => { collectPlan(); await savePlan(); toast("บันทึกแผนแล้ว", "ok"); render4(); }),
+  "t4-save": (b) => busy(b, async () => { collectPlan(); await savePlan(); toast("บันทึกแผนแล้ว", "ok"); render5(); }),
   "t4-del": async () => {
     if (!confirm("ลบแผนนี้?")) return;
-    must(await sb.from("lesson_plans").delete().eq("id", S.plan.id)); S.plan = null; await loadPlans(); render4();
+    must(await sb.from("lesson_plans").delete().eq("id", S.plan.id)); S.plan = null; await loadPlans(); render5();
   },
   "t4-ai": (b) => busy(b, async () => { collectPlan(); await aiDraftPlan(S.plan); await savePlan(); toast("AI ร่างแผนแล้ว (ตรวจก่อนใช้จริง)", "ok"); renderPlanEditor(); }),
   "t4-export": (b) => busy(b, async () => { collectPlan(); await savePlan(); const m = await import("./export.js"); await m.exportPlans(await exportCtx(), [S.plan]); }),
@@ -717,7 +753,7 @@ const actions = {
   "k-down": (b) => moveKey(b.dataset.id, 1),
 };
 async function reloadKeys() {
-  S.keys = must(await sb.from("api_keys").select("id,label,priority,enabled,exhausted_until,last_error,last_used_at,created_at").order("priority").order("created_at")); render5();
+  S.keys = must(await sb.from("api_keys").select("id,label,priority,enabled,exhausted_until,last_error,last_used_at,created_at").order("priority").order("created_at")); render6();
 }
 async function moveKey(id, d) {
   const i = S.keys.findIndex((k) => k.id === id), j = i + d; if (j < 0 || j >= S.keys.length) return;
