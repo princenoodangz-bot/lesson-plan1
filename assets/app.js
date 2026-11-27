@@ -2,7 +2,7 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 import {
   SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
-  emptySections, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
+  emptySections, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
 } from "./template.js";
 
 const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG;
@@ -199,7 +199,7 @@ function go(tab) {
   $$(".step").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   const c = S.course ? `${subjName(S.course.subject_id)} ป.${S.course.grade} · ${S.course.curriculum_id}` : S.cs ? `${subjName(S.cs.subject_id)} ป.${S.cs.grade} · ${S.cs.curriculum_id}` : "";
   $("#crumb").textContent = c;
-  ({ t1: render1, t2: render2, t3: render3, t4: render4, t5: render5, t6: render6, t7: render7, t8: render8 })[tab]();
+  ({ t1: render1, t2: render2, t3: render3, t4: render4, t5: render5, t6: render6, t7: render7, t8: render8, t9: render9 })[tab]();
 }
 $("#steps").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) go(b.dataset.tab); });
 
@@ -501,6 +501,49 @@ async function renderPlanEditor() {
 // =====================================================================
 // TAB 5 — settings & API keys
 // =====================================================================
+// ---------- tab 9: school curriculum + teaching schedule files ----------
+const T9 = { subject: 5, curriculum: "2551r60", grade: 5 };
+function render9() {
+  const el = $("#t9");
+  const cl = S.courses.map((c) => `<div class="item"><div><div class="t">${esc(c.course_code ?? "")} ${esc(c.course_name)}</div><div class="muted small">${esc(subjName(c.subject_id))} · ป.${c.grade} · ${esc(c.curriculum_id)} · ${c.total_hours} ชม.${csOfCourse(c)?.content?.doc?.course_description ? " · มีเนื้อหาหลักสูตรแล้ว" : ""}</div></div>
+    <div class="row"><button class="btn small primary" data-act="t9-cur" data-id="${c.id}">หลักสูตรสถานศึกษา (Word)</button><button class="btn small accent" data-act="t9-sch" data-id="${c.id}">กำหนดการสอน (Word)</button><button class="btn small" data-act="t9-aidoc" data-id="${c.id}">AI ร่างเนื้อหาหลักสูตร</button></div></div>`).join("") || '<div class="muted">ยังไม่มีรายวิชา ใช้ฟอร์มด้านบนสร้างได้เลย</div>';
+  el.innerHTML = `<div class="card accent"><h2>9 · หลักสูตรสถานศึกษา และกำหนดการสอน <span class="muted small">— สร้างตั้งแต่ต้นด้วย AI แล้วโหลดเป็น Word</span></h2>
+    <p class="muted small">กดครั้งเดียว ระบบดึงตัวชี้วัดจริงจากฐานข้อมูล → AI ร่างเนื้อหาหลักสูตร → AI ร่างหน่วยการเรียนรู้ ชั่วโมง คะแนน → สร้างหน่วย แก้ไขต่อได้ที่แถบ 1–3</p>
+    <div class="grid">
+      <label>กลุ่มสาระ/วิชา<select id="t9s">${optList(S.subjects, "id", "name")}</select></label>
+      <label>หลักสูตร<select id="t9c">${S.curricula.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></label>
+      <label>ชั้น<select id="t9g">${[1, 2, 3, 4, 5, 6].map((g) => `<option value="${g}">ป.${g}</option>`).join("")}</select></label>
+      <label>รหัสวิชา<input id="t9code" placeholder="พ15101"></label>
+      <label>ชื่อรายวิชา<input id="t9name" placeholder="สุขศึกษาและพลศึกษา"></label>
+      <label>ชั่วโมงทั้งปี<input id="t9hours" type="number" value="80"></label>
+      <label>ภาคเรียน<select id="t9sem"><option>2</option><option>1</option></select></label>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t9-all">สร้างทั้งชุดด้วย AI</button></div><div class="muted small" id="t9st" style="margin-top:6px"></div></div>
+    <div class="card"><h3>รายวิชาของฉัน</h3><div class="list">${cl}</div></div>`;
+  $("#t9s").value = T9.subject; $("#t9c").value = T9.curriculum; $("#t9g").value = T9.grade;
+  ["s", "c", "g"].forEach((k) => $("#t9" + k).addEventListener("change", () => { T9.subject = Number($("#t9s").value); T9.curriculum = $("#t9c").value; T9.grade = Number($("#t9g").value); }));
+}
+async function t9Ctx(courseId) {
+  const c = S.courses.find((x) => x.id === courseId), cs = csOfCourse(c);
+  const [rows, units] = await Promise.all([
+    sb.from("course_structure_rows").select("*").eq("course_structure_id", c.id).order("seq"),
+    sb.from("units").select("*").eq("course_structure_id", c.id).order("seq"),
+  ]);
+  const inds = await loadInds(c.curriculum_id, c.subject_id, c.grade);
+  const stds = cs?.content?.standards ?? (await loadStds(c.curriculum_id, c.subject_id));
+  const R = must(rows), used = new Set(R.flatMap((r) => r.indicator_codes ?? []));
+  return { c, cs, thNum, school: S.settings?.school_name ?? "", year: S.settings?.academic_year ?? "", subject: subjName(c.subject_id), grade: c.grade, curriculumName: S.curricula.find((x) => x.id === c.curriculum_id)?.name ?? c.curriculum_id,
+    totalHours: c.total_hours, perWeek: cs?.content?.time?.hours_per_week, doc: cs?.content?.doc, standards: stds,
+    indicators: used.size ? inds.filter((i) => used.has(i.code)) : inds, courseName: c.course_name, courseCode: c.course_code, semesters: c.semester_count, rows: R, units: must(units) };
+}
+async function t9Draft(cx) {
+  const out = await callAI(promptCurriculumDoc({ subject: cx.subject, grade: cx.grade, curriculum: cx.curriculumName, school: cx.school, indicators: cx.indicators, standards: cx.standards }));
+  const doc = { vision: out.vision ?? "", course_description: out.course_description ?? "", competencies: out.competencies ?? "", approach: out.approach ?? "" };
+  if (cx.cs) { const content = { ...cx.cs.content, doc }; must(await sb.from("curriculum_structures").update({ content }).eq("id", cx.cs.id)); cx.cs.content = content; }
+  cx.doc = doc; return doc;
+}
+const t9Msg = (m) => { const e = $("#t9st"); if (e) e.textContent = m; };
+const t9Save = async (doc, name) => (await import("./export.js")).saveBlob(await (await import("./curdoc.js")).docBlob(doc), safeName(name) + ".docx");
 // ---------- tab 8: downloads ----------
 const T8 = { sel: new Set() };
 const safeName = (x) => String(x).replace(/[\\/:*?"<>|]/g, "_").trim();
@@ -922,6 +965,38 @@ Object.assign(actions, {
   "t8-json": (b) => busy(b, async () => {
     const data = { course: S.course, units: S.units, plans: T8.plans ?? [], indicators: await courseIndicators() };
     await t8Download(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }), `${safeName(S.course.course_code || "course")}_ข้อมูล.json`);
+  }),
+});
+
+Object.assign(actions, {
+  "t9-cur": (b) => busy(b, async () => { const cx = await t9Ctx(b.dataset.id); if (!cx.doc?.course_description) await t9Draft(cx); await t9Save(await (await import("./curdoc.js")).buildCurriculumDoc(cx), `หลักสูตร_${cx.courseCode || cx.courseName}`); render9(); }),
+  "t9-sch": (b) => busy(b, async () => { const cx = await t9Ctx(b.dataset.id); await t9Save(await (await import("./curdoc.js")).buildScheduleDoc(cx), `โครงสร้างกำหนดการสอน_${cx.courseCode || cx.courseName}`); }),
+  "t9-aidoc": (b) => busy(b, async () => { const cx = await t9Ctx(b.dataset.id); await t9Draft(cx); toast("AI ร่างเนื้อหาหลักสูตรแล้ว กด 'หลักสูตรสถานศึกษา (Word)' เพื่อโหลด", "ok"); render9(); }),
+  "t9-all": (b) => busy(b, async () => {
+    const code = $("#t9code").value.trim(), name = $("#t9name").value.trim(), total = num($("#t9hours").value), sem = Number($("#t9sem").value);
+    if (!name || !total) throw new Error("กรอกชื่อรายวิชาและชั่วโมงทั้งปี");
+    t9Msg("1/5 ดึงมาตรฐานและตัวชี้วัด...");
+    const inds = await loadInds(T9.curriculum, T9.subject, T9.grade), stds = await loadStds(T9.curriculum, T9.subject);
+    if (!inds.length) throw new Error("ยังไม่มีตัวชี้วัดของวิชา/ชั้น/หลักสูตรนี้ในระบบ ไปแถบ 1 → 'นำเข้าตัวชี้วัดเอง' ก่อน");
+    const school = S.settings?.school_name ?? "";
+    const content = { school_name: school, standards: stds.filter((x) => inds.some((i) => i.standard_code === x.standard_code)), indicators: inds, time: { total_hours: total } };
+    const cs = must(await sb.from("curriculum_structures").insert({ subject_id: T9.subject, curriculum_id: T9.curriculum, grade: T9.grade, school_name: school, title: `${name} ป.${T9.grade}`, content }).select().single());
+    S.curStructs.unshift(cs);
+    const course = must(await sb.from("course_structures").insert({ curriculum_structure_id: cs.id, subject_id: cs.subject_id, curriculum_id: cs.curriculum_id, grade: cs.grade, course_code: code || null, course_name: name, total_hours: total, semester_count: sem }).select().single());
+    S.courses.unshift(course); S.course = course; S.cs = cs; S.indCache = {}; saveSel();
+    const subj = subjName(T9.subject), curName = S.curricula.find((x) => x.id === T9.curriculum)?.name ?? T9.curriculum;
+    t9Msg("2/5 AI ร่างเนื้อหาหลักสูตร...");
+    await t9Draft({ cs, subject: subj, grade: T9.grade, curriculumName: curName, school, indicators: inds, standards: content.standards });
+    t9Msg("3/5 AI ร่างหน่วยการเรียนรู้ ชั่วโมง คะแนน...");
+    const out = await callAI(promptStructure({ subject: subj, grade: T9.grade, curriculum: T9.curriculum, totalHours: total, semesters: sem, indicators: inds }));
+    const valid = new Set(inds.map((i) => i.code));
+    const rows = (out.rows ?? []).map((r, i) => ({ id: uid(), course_structure_id: course.id, seq: i + 1, kind: r.kind === "exam" ? "exam" : "unit", semester: num(r.semester) || 1, name: String(r.name ?? ""), indicator_codes: r.kind === "exam" ? [] : (r.indicator_codes ?? []).filter((x) => valid.has(x)), hours: Math.round(num(r.hours)), score_weight: num(r.score_weight) }));
+    if (!rows.length) throw new Error("AI ไม่ได้ส่งหน่วยกลับมา ลองกดใหม่");
+    t9Msg("4/5 บันทึกโครงสร้าง..."); must(await sb.from("course_structure_rows").insert(rows));
+    t9Msg("5/5 สร้างหน่วยการเรียนรู้...");
+    must(await sb.from("units").insert(rows.filter((r) => r.kind === "unit").map((r, i) => ({ course_structure_id: course.id, source_row_id: r.id, seq: i + 1, semester: r.semester, name: r.name, indicator_codes: r.indicator_codes, hours: Math.max(1, r.hours), score_weight: r.score_weight }))));
+    await loadRows(); await loadUnits(); t9Msg("");
+    toast("สร้างเสร็จ โหลดไฟล์ Word ได้ที่รายการด้านล่าง", "ok"); render9();
   }),
 });
 
