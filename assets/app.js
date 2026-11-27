@@ -199,7 +199,7 @@ function go(tab) {
   $$(".step").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   const c = S.course ? `${subjName(S.course.subject_id)} ป.${S.course.grade} · ${S.course.curriculum_id}` : S.cs ? `${subjName(S.cs.subject_id)} ป.${S.cs.grade} · ${S.cs.curriculum_id}` : "";
   $("#crumb").textContent = c;
-  ({ t1: render1, t2: render2, t3: render3, t4: render4, t5: render5, t6: render6, t7: render7 })[tab]();
+  ({ t1: render1, t2: render2, t3: render3, t4: render4, t5: render5, t6: render6, t7: render7, t8: render8 })[tab]();
 }
 $("#steps").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) go(b.dataset.tab); });
 
@@ -501,6 +501,40 @@ async function renderPlanEditor() {
 // =====================================================================
 // TAB 5 — settings & API keys
 // =====================================================================
+// ---------- tab 8: downloads ----------
+const T8 = { sel: new Set() };
+const safeName = (x) => String(x).replace(/[\\/:*?"<>|]/g, "_").trim();
+async function render8() {
+  const el = $("#t8");
+  if (!S.course) { el.innerHTML = `<div class="card accent"><h2>8 · ดาวน์โหลด</h2><p>เลือกรายวิชาที่แถบ 2 ก่อน</p><button class="btn" data-act="goto" data-tab="t2">ไปแถบ 2</button></div>`; return; }
+  const ids = S.units.map((u) => u.id);
+  const plans = ids.length ? must(await sb.from("lesson_plans").select("*").in("unit_id", ids).order("seq")) : [];
+  T8.plans = plans;
+  const body = S.units.map((u) => {
+    const ps = plans.filter((p) => p.unit_id === u.id);
+    return `<div class="card"><div class="row"><label style="flex-direction:row;gap:8px;color:var(--text)"><input type="checkbox" data-t8u="${u.id}"> <b>หน่วยที่ ${u.seq} ${esc(u.name)}</b></label><span class="muted small">${ps.length} แผน</span><button class="btn small" data-act="t8-unit" data-id="${u.id}" ${ps.length ? "" : "disabled"}>โหลดทั้งหน่วย (1 ไฟล์)</button></div>
+      ${ps.map((p) => `<div class="row" style="margin-top:6px"><label style="flex:1;flex-direction:row;gap:8px;color:var(--text)"><input type="checkbox" data-t8p="${p.id}" data-u="${u.id}" ${T8.sel.has(p.id) ? "checked" : ""}> แผนที่ ${p.seq} ${esc(p.title)}</label><button class="btn small" data-act="t8-one" data-id="${p.id}">โหลด</button></div>`).join("") || '<div class="muted small">ยังไม่มีแผน</div>'}</div>`;
+  }).join("") || '<div class="muted">ยังไม่มีหน่วยการเรียนรู้</div>';
+  el.innerHTML = `<div class="card accent"><h2>8 · ดาวน์โหลด <span class="muted small">— เลือกแล้วโหลดเป็นไฟล์ Word แยกรายแผน</span></h2>
+    <div class="row"><button class="btn small" data-act="t8-all">เลือกทั้งหมด</button><button class="btn small" data-act="t8-none">ล้างที่เลือก</button><button class="btn small primary" data-act="t8-zip">โหลดที่เลือก (ZIP แยกไฟล์)</button><button class="btn small accent" data-act="t8-each">โหลดที่เลือกทีละไฟล์</button></div>
+    <div class="muted small" id="t8n" style="margin-top:6px">เลือก 0 แผน</div></div>
+    ${body}
+    <div class="card"><h3>ข้อมูลหลักสูตรของรายวิชานี้</h3><p class="muted small">มาตรฐานและตัวชี้วัดที่ใช้อยู่ในรายวิชา</p><div class="row"><button class="btn small" data-act="t8-csv">โหลดตัวชี้วัด (CSV)</button><button class="btn small" data-act="t8-json">โหลดข้อมูลทั้งหมด (JSON)</button></div></div>`;
+  t8Count();
+}
+function t8Count() { const n = $("#t8n"); if (n) n.textContent = `เลือก ${T8.sel.size} แผน`; $$("[data-t8u]").forEach((c) => { const ps = (T8.plans ?? []).filter((p) => p.unit_id === c.dataset.t8u); c.checked = ps.length > 0 && ps.every((p) => T8.sel.has(p.id)); }); }
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (t.dataset?.t8p) { t.checked ? T8.sel.add(t.dataset.t8p) : T8.sel.delete(t.dataset.t8p); t8Count(); }
+  if (t.dataset?.t8u) { (T8.plans ?? []).filter((p) => p.unit_id === t.dataset.t8u).forEach((p) => { t.checked ? T8.sel.add(p.id) : T8.sel.delete(p.id); $(`[data-t8p="${p.id}"]`).checked = t.checked; }); t8Count(); }
+});
+async function t8Files(list) {
+  const m = await import("./export.js"); const out = [];
+  for (const p of list) { const u = S.units.find((x) => x.id === p.unit_id); const { blob, name } = await m.planBlob(await exportCtx(u), [{ ...p, indicator_codes: p.indicator_codes ?? [], sections: p.sections ?? {} }]); out.push({ blob, name }); }
+  return out;
+}
+const t8Chosen = () => (T8.plans ?? []).filter((p) => T8.sel.has(p.id));
+function t8Download(blob, name) { return import("./export.js").then((m) => m.saveBlob(blob, name)); }
 function render7() {
   const st = S.settings ?? {};
   $("#t5").innerHTML = `
@@ -854,10 +888,10 @@ async function savePlan() {
   must(await sb.from("lesson_plans").update({ title: p.title, hours: p.hours, status: p.status, indicator_codes: p.indicator_codes, sections: p.sections, updated_at: new Date().toISOString() }).eq("id", p.id));
   await loadPlans();
 }
-async function exportCtx() {
+async function exportCtx(unit = S.unit) {
   const c = S.course, cs = csOfCourse(c), inds = await courseIndicators();
   const stds = cs?.content?.standards ?? (await loadStds(c.curriculum_id, c.subject_id));
-  return { school: S.settings?.school_name ?? "", teacher: S.settings?.teacher_name ?? "", deputy: S.settings?.deputy_name ?? "", director: S.settings?.director_name ?? "", year: S.settings?.academic_year ?? "", course: c, unit: S.unit, subject: subjName(c.subject_id), indicators: inds, standards: stds, thNum };
+  return { school: S.settings?.school_name ?? "", teacher: S.settings?.teacher_name ?? "", deputy: S.settings?.deputy_name ?? "", director: S.settings?.director_name ?? "", year: S.settings?.academic_year ?? "", course: c, unit, subject: subjName(c.subject_id), indicators: inds, standards: stds, thNum };
 }
 
 // indicator picker modal
@@ -867,6 +901,29 @@ function pickIndicators(all, current, onOk) {
   $("#mCancel").onclick = closeModal;
   $("#mOk").onclick = () => { const codes = $$("#modalBody input:checked").map((x) => x.value); closeModal(); onOk(codes); };
 }
+
+Object.assign(actions, {
+  "t8-all": () => { (T8.plans ?? []).forEach((p) => T8.sel.add(p.id)); render8(); },
+  "t8-none": () => { T8.sel.clear(); render8(); },
+  "t8-one": (b) => busy(b, async () => { const p = T8.plans.find((x) => x.id === b.dataset.id); const [f] = await t8Files([p]); await t8Download(f.blob, f.name); }),
+  "t8-unit": (b) => busy(b, async () => { const u = S.units.find((x) => x.id === b.dataset.id); const m = await import("./export.js"); const { blob, name } = await m.planBlob(await exportCtx(u), T8.plans.filter((p) => p.unit_id === u.id)); await t8Download(blob, name); }),
+  "t8-each": (b) => busy(b, async () => { const l = t8Chosen(); if (!l.length) return toast("ยังไม่ได้เลือกแผน", "err"); for (const f of await t8Files(l)) { await t8Download(f.blob, f.name); await new Promise((r) => setTimeout(r, 600)); } }),
+  "t8-zip": (b) => busy(b, async () => {
+    const l = t8Chosen(); if (!l.length) return toast("ยังไม่ได้เลือกแผน", "err");
+    const JSZip = (await import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm")).default;
+    const z = new JSZip(); for (const f of await t8Files(l)) z.file(f.name, f.blob);
+    await t8Download(await z.generateAsync({ type: "blob" }), `${safeName(S.course.course_code || "แผน")}_แผนรายคาบ.zip`);
+  }),
+  "t8-csv": (b) => busy(b, async () => {
+    const inds = await courseIndicators(); const q = (x) => `"${String(x ?? "").replace(/"/g, '""')}"`;
+    const csv = "\ufeffรหัส,ตัวชี้วัด\n" + inds.map((i) => `${q(i.code)},${q(i.description)}`).join("\n");
+    await t8Download(new Blob([csv], { type: "text/csv;charset=utf-8" }), `${safeName(S.course.course_code || "course")}_ตัวชี้วัด.csv`);
+  }),
+  "t8-json": (b) => busy(b, async () => {
+    const data = { course: S.course, units: S.units, plans: T8.plans ?? [], indicators: await courseIndicators() };
+    await t8Download(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }), `${safeName(S.course.course_code || "course")}_ข้อมูล.json`);
+  }),
+});
 
 // global listeners
 document.addEventListener("click", (e) => {

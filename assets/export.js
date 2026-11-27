@@ -207,14 +207,22 @@ export function fileName(ctx, plans) {
   return base.replace(/[\\/:*?"<>|]/g, "_") + ".docx";
 }
 
-export async function exportPlans(ctx, plans) {
-  if (!plans?.length) throw new Error("ไม่มีแผนให้ส่งออก");
+export async function planBlob(ctx, plans) {
   const D = await getDocx();
   const c = { ...ctx, multi: plans.length > 1 };
   const doc = await buildDoc(c, plans);
-  const blob = await D.Packer.toBlob(doc);
+  return { blob: await D.Packer.toBlob(doc), name: fileName(c, plans) };
+}
+
+export function saveBlob(blob, name) {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = fileName(c, plans);
+  a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+export async function exportPlans(ctx, plans) {
+  if (!plans?.length) throw new Error("ไม่มีแผนให้ส่งออก");
+  const { blob, name } = await planBlob(ctx, plans);
+  saveBlob(blob, name);
 }
