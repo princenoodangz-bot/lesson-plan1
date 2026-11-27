@@ -50,11 +50,20 @@ const curName = (id) => S.curricula.find((c) => c.id === id)?.id ?? id;
 const saveSel = () => localStorage.setItem("lp_sel", JSON.stringify({ cs: S.cs?.id, course: S.course?.id, unit: S.unit?.id, tab: S.tab }));
 
 // ---------- auth ----------
+function demoBanner() {
+  if (!DEMO) return;
+  let why = ""; try { why = sessionStorage.getItem("lp_err") || ""; } catch {}
+  const d = document.createElement("div");
+  d.style.cssText = "background:#b91c1c;color:#fff;padding:8px 12px;text-align:center;font-size:14px;position:sticky;top:0;z-index:50";
+  d.textContent = "⚠ โหมดตัวอย่าง: ข้อมูล/API key ไม่ถูกบันทึก และ AI ใช้ไม่ได้" + (why ? " — เหตุผล: " + why : "");
+  document.body.prepend(d);
+}
 async function boot() {
+  demoBanner();
   let { data } = await sb.auth.getSession();
   if (!data.session && sb.auth.signInAnonymously) {
     const r = await sb.auth.signInAnonymously();
-    if (r.error) { if (!DEMO) { location.replace("?demo=1"); return; } }
+    if (r.error) { if (!DEMO) { try { sessionStorage.setItem("lp_err", r.error.message); } catch {} location.replace("?demo=1"); return; } }
     else data = r.data;
   }
   await onSession(data.session);
