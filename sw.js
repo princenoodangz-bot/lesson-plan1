@@ -1,5 +1,5 @@
 // Minimal offline shell. Data calls (Supabase / Gemini) always go to the network.
-const CACHE = "lessonplan-shell-v1";
+const CACHE = "lessonplan-shell-v2";
 const SHELL = ["./", "index.html", "assets/app.css", "assets/app.js", "assets/template.js", "assets/export.js", "assets/config.js", "assets/icon.svg", "manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {

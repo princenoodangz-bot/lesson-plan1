@@ -54,7 +54,7 @@ async function boot() {
   let { data } = await sb.auth.getSession();
   if (!data.session && sb.auth.signInAnonymously) {
     const r = await sb.auth.signInAnonymously();
-    if (r.error) $("#authMsg").textContent = "เปิดระบบอัตโนมัติไม่สำเร็จ: " + r.error.message;
+    if (r.error) { if (!DEMO) { location.replace("?demo=1"); return; } }
     else data = r.data;
   }
   await onSession(data.session);
