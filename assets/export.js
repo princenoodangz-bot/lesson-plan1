@@ -133,6 +133,12 @@ export async function buildDoc(ctx, plans) {
       return new TableRow({ cantSplit: true, children: [cell(itemParas, W[0]), cell(toParas(a.method), W[1]), cell(toParas(a.tool), W[2]), cell(toParas(a.criteria).map((p) => p), W[3])] });
     });
     out.push(new Table({ width: { size: cm(W.reduce((x, y) => x + y)), type: WidthType.DXA }, columnWidths: W.map(cm), rows: [hdr, ...rows], layout: TableLayoutType.FIXED }));
+    // attachments (worksheets / rubric)
+    (sec.attachments ?? []).forEach((a, ai) => {
+      if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim()) return;
+      out.push(para(`เอกสารแนบที่ ${ai + 1}  ${a.title ?? ""}`, { bold: true, align: AlignmentType.CENTER, pageBreakBefore: true, line: 240 }));
+      String(a.body ?? "").split(/\r?\n/).forEach((l) => out.push(para(l, { indent: { left: cm(0.6) } })));
+    });
     return out;
   };
 

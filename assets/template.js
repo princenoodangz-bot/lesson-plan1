@@ -61,6 +61,7 @@ export const emptySections = () => ({
   process: ["", "", "", "", ""],
   media: "",
   resources: { inside: "", outside: "", local: "" },
+  attachments: [],
   assessment: [
     { item: "พุทธิพิสัย (K)", method: "", tool: "", criteria: "" },
     { item: "ทักษะ/กระบวนการ (P)", method: "", tool: "", criteria: "" },
@@ -130,4 +131,41 @@ ${lines(indicators)}
 "media":"...",
 "resources":{"inside":"...","outside":"-","local":"-"},
 "assessment":[{"item":"พุทธิพิสัย (K)","method":"...","tool":"...","criteria":"..."},{"item":"ทักษะ/กระบวนการ (P)","method":"...","tool":"...","criteria":"..."},{"item":"จิตพิสัย (A)","method":"...","tool":"...","criteria":"..."},{"item":"คุณลักษณะอันพึงประสงค์","method":"...","tool":"...","criteria":"..."}]}`;
+}
+
+
+// ---- extra prompts ----
+export function promptPlanTitles({ subject, grade, unit, indicators, count }) {
+  return `วางแผนการสอนรายคาบของหน่วยการเรียนรู้นี้ให้ครบ ${count} แผน (แผนละ 1 ชั่วโมง รวม ${unit.hours} ชั่วโมง)
+รายวิชา: ${subject} ชั้นประถมศึกษาปีที่ ${grade}
+หน่วย: ${unit.name}
+สาระสำคัญของหน่วย: ${unit.key_concept || "-"}
+ตัวชี้วัดของหน่วย:
+${lines(indicators)}
+เรียงลำดับเนื้อหาจากง่ายไปยาก แต่ละแผนมีเรื่องไม่ซ้ำกัน และให้ตัวชี้วัดที่เกี่ยวข้อง (ใช้รหัสจากรายการข้างต้นเท่านั้น ห้ามสร้างรหัสใหม่)
+ตอบเป็น JSON เท่านั้น: {"plans":[{"title":"เรื่องของแผน","indicator_codes":["รหัส"]}]}`;
+}
+
+export function promptField({ subject, grade, unit, plan, label, current, instruction, indicators }) {
+  return `ช่วยเขียนหัวข้อ "${label}" ของแผนการจัดการเรียนรู้ใหม่
+รายวิชา: ${subject} ชั้นประถมศึกษาปีที่ ${grade}
+หน่วย: ${unit.name}  เรื่องของแผน: ${plan.title} (${plan.hours} ชั่วโมง)
+ตัวชี้วัด:
+${lines(indicators)}
+เนื้อหาปัจจุบัน:
+${current || "(ว่าง)"}
+${instruction ? "คำสั่งเพิ่มเติมจากครู: " + instruction : ""}
+ตอบเป็น JSON เท่านั้น: {"text":"เนื้อหาใหม่ ใช้ \\n แยกบรรทัด"}`;
+}
+
+export function promptAttachments({ subject, grade, unit, plan, indicators }) {
+  return `สร้างเอกสารแนบท้ายแผนการจัดการเรียนรู้ 2 ชิ้น: (1) ใบงาน (2) เกณฑ์การให้คะแนนแบบรูบริก
+รายวิชา: ${subject} ชั้นประถมศึกษาปีที่ ${grade}
+หน่วย: ${unit.name}  เรื่อง: ${plan.title}
+ตัวชี้วัด:
+${lines(indicators)}
+สาระสำคัญ: ${plan.sections?.key_idea || "-"}
+ใบงาน: มีชื่อ-ชั้น-เลขที่ คำชี้แจง และข้อคำถาม 5-8 ข้อที่ตรงกับตัวชี้วัด
+รูบริก: 3-4 เกณฑ์ ระดับคะแนน 4/3/2/1 พร้อมคำอธิบายแต่ละระดับ
+ตอบเป็น JSON เท่านั้น: {"attachments":[{"title":"ใบงาน เรื่อง ...","body":"ข้อความหลายบรรทัด ใช้ \\n แยกบรรทัด"},{"title":"เกณฑ์การให้คะแนน (รูบริก)","body":"..."}]}`;
 }

@@ -2,7 +2,7 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 import {
   SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
-  emptySections, promptStructure, promptKeyIdea, promptPlan,
+  emptySections, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
 } from "./template.js";
 
 const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG;
@@ -329,18 +329,35 @@ async function renderT3Body() {
 // =====================================================================
 // TAB 4 — lesson plans
 // =====================================================================
+const planDone = (p) => !!String(p.sections?.key_idea ?? "").trim();
 async function render4() {
   const el = $("#t4");
   if (!S.units.length) { el.innerHTML = `<div class="card accent"><h2>4 · แผนการจัดการเรียนรู้รายคาบ</h2><p>ต้องมีหน่วยการเรียนรู้ในแถบ 3 ก่อน</p><button class="btn" data-act="goto" data-tab="t3">ไปแถบ 3</button></div>`; return; }
+  let view = "table"; try { view = localStorage.getItem("lp_view") || "table"; } catch {}
   const unitOpts = S.units.map((u) => `<option value="${u.id}">หน่วยที่ ${u.seq} ${esc(u.name)} (${u.hours} ชม.)</option>`).join("");
   const ph = sum(S.plans.map((p) => num(p.hours)));
+  const stCls = (p) => (p.status === "reviewed" ? "ตรวจแล้ว" : planDone(p) ? "ร่างแล้ว" : "ว่าง");
+  const tableHtml = `<div class="tablewrap"><table><tr><th>#</th><th>เรื่อง</th><th>ชม.</th><th>ตัวชี้วัด</th><th>วันที่สอน</th><th>สถานะ</th><th></th></tr>
+    ${S.plans.map((p, i) => `<tr class="${S.plan?.id === p.id ? "sel" : ""}">
+      <td>${p.seq}</td>
+      <td><input data-pid="${p.id}" data-pf="title" value="${esc(p.title)}" style="min-width:180px"></td>
+      <td><input data-pid="${p.id}" data-pf="hours" type="number" min="1" value="${p.hours}" style="width:64px"></td>
+      <td><div class="chips">${p.indicator_codes.map((c) => `<span class="chip">${esc(c.replace(/^\S+\s/, ""))}</span>`).join("")}</div></td>
+      <td><input data-pid="${p.id}" data-pf="planned_date" type="date" value="${p.planned_date ?? ""}"></td>
+      <td><select data-pid="${p.id}" data-pf="status"><option value="draft" ${p.status !== "reviewed" ? "selected" : ""}>${planDone(p) ? "ร่างแล้ว" : "ว่าง/ร่าง"}</option><option value="reviewed" ${p.status === "reviewed" ? "selected" : ""}>ตรวจแล้ว</option></select></td>
+      <td style="white-space:nowrap"><button class="btn small" data-act="t4-up" data-id="${p.id}" ${i === 0 ? "disabled" : ""}>↑</button> <button class="btn small" data-act="t4-down" data-id="${p.id}" ${i === S.plans.length - 1 ? "disabled" : ""}>↓</button> <button class="btn small primary" data-act="t4-pick" data-id="${p.id}">แก้ไข</button> <button class="btn small" data-act="t4-copy" data-id="${p.id}">คัดลอก</button> <button class="btn small danger" data-act="t4-del-id" data-id="${p.id}">ลบ</button></td></tr>`).join("") || '<tr><td colspan="7" class="muted">ยังไม่มีแผน</td></tr>'}
+    <tr><td></td><td><b>รวม</b></td><td><b>${ph}/${S.unit.hours}</b></td><td colspan="4"></td></tr></table></div>`;
+  const listHtml = `<div class="list">${S.plans.map((p) => `<details class="item" style="display:block"><summary style="cursor:pointer"><b>แผนที่ ${p.seq}</b> ${esc(p.title)} <span class="muted small">· ${p.hours} ชม. · ${stCls(p)}${p.planned_date ? " · " + p.planned_date : ""}</span></summary>
+      <div class="small" style="margin-top:8px"><div class="chips">${p.indicator_codes.map((c) => `<span class="chip">${esc(c)}</span>`).join("")}</div>
+      <p><b>สาระสำคัญ:</b> ${esc(p.sections?.key_idea || "-")}</p><p><b>จุดประสงค์:</b> ${esc([p.sections?.objectives?.K, p.sections?.objectives?.P, p.sections?.objectives?.A].filter(Boolean).join(" | ") || "-")}</p>
+      <div class="row"><button class="btn small primary" data-act="t4-pick" data-id="${p.id}">แก้ไข</button> <button class="btn small" data-act="t4-copy" data-id="${p.id}">คัดลอก</button> <button class="btn small danger" data-act="t4-del-id" data-id="${p.id}">ลบ</button></div></div></details>`).join("") || '<div class="muted">ยังไม่มีแผน</div>'}</div>`;
   el.innerHTML = `<div class="card accent"><h2>4 · แผนการจัดการเรียนรู้รายคาบ</h2>
     <div class="row"><label style="flex:1">หน่วยการเรียนรู้<select id="t4u">${unitOpts}</select></label></div>
-    <div class="check"><div class="stat ${ph === S.unit.hours ? "ok" : ""}"><span class="muted small">ชั่วโมงแผนรวม</span><b>${ph}/${S.unit.hours}</b></div><div class="stat"><span class="muted small">จำนวนแผน</span><b>${S.plans.length}</b></div></div></div>
-    <div class="split"><div class="card"><div class="row spread"><h3>แผนในหน่วยนี้</h3><button class="btn small primary" data-act="t4-add">+ เพิ่มแผน</button></div>
-      <div class="list" style="margin-top:8px">${S.plans.map((p) => `<div class="item ${S.plan?.id === p.id ? "sel" : ""}" data-act="t4-pick" data-id="${p.id}" style="cursor:pointer"><div><div class="t">แผนที่ ${p.seq} ${esc(p.title)}</div><div class="muted small">${p.hours} ชม. · ${p.status === "reviewed" ? "ตรวจแล้ว" : "ฉบับร่าง"}</div></div></div>`).join("") || '<div class="muted">ยังไม่มีแผน</div>'}</div>
-      ${S.plans.length ? '<div class="row" style="margin-top:10px"><button class="btn small accent" data-act="t4-export-unit">ส่งออก Word ทั้งหน่วย</button></div>' : ""}</div>
-    <div id="t4edit"></div></div>`;
+    <div class="check"><div class="stat ${ph === S.unit.hours ? "ok" : "bad"}"><span class="muted small">ชั่วโมงแผนรวม</span><b>${ph}/${S.unit.hours}</b></div><div class="stat"><span class="muted small">จำนวนแผน</span><b>${S.plans.length}</b></div><div class="stat"><span class="muted small">ร่างแล้ว</span><b>${S.plans.filter(planDone).length}/${S.plans.length}</b></div></div>
+    <div class="row" style="margin-top:10px"><button class="btn small primary" data-act="t4-add">+ เพิ่มแผน</button><button class="btn small accent" data-act="t4-ai-all">✨ AI สร้างแผนทั้งหน่วย</button><button class="btn small" data-act="t4-check">ตรวจความครบถ้วน</button><button class="btn small" data-act="t4-export-unit">ส่งออก Word ทั้งหน่วย</button></div></div>
+    <div class="card"><div class="row spread"><h3>แผนในหน่วยนี้</h3><div class="row"><button class="btn small ${view === "table" ? "primary" : ""}" data-act="t4-view" data-v="table">ตาราง</button><button class="btn small ${view === "list" ? "primary" : ""}" data-act="t4-view" data-v="list">รายการ</button></div></div>
+      <div style="margin-top:8px">${view === "table" ? tableHtml : listHtml}</div></div>
+    <div id="t4edit"></div>`;
   $("#t4u").value = S.unit.id;
   $("#t4u").addEventListener("change", async (e) => { S.unit = S.units.find((u) => u.id === e.target.value); S.plan = null; await loadPlans(); saveSel(); render4(); });
   renderPlanEditor();
@@ -352,7 +369,8 @@ async function renderPlanEditor() {
   p.sections = sec;
   const allInds = await courseIndicators();
   const sel = allInds.filter((i) => p.indicator_codes.includes(i.code));
-  const ta = (path, label, rows = 3) => `<label>${label}<textarea data-p="${path}" rows="${rows}">${esc(path.split(".").reduce((o, k) => o?.[k], sec) ?? "")}</textarea></label>`;
+  const AIF = ["objectives.K", "objectives.P", "objectives.A", "content", "key_idea", "media", "process.0", "process.1", "process.2", "process.3", "process.4"];
+  const ta = (path, label, rows = 3) => `<label>${label}<textarea data-p="${path}" rows="${rows}">${esc(path.split(".").reduce((o, k) => o?.[k], sec) ?? "")}</textarea></label>${AIF.includes(path) ? `<button type="button" class="btn small" data-act="t4-ai-field" data-path="${path}" data-label="${esc(label)}">✨ AI เขียนหัวข้อนี้ใหม่</button>` : ""}`;
   const inp = (path, label) => `<label>${label}<input data-p="${path}" value="${esc(path.split(".").reduce((o, k) => o?.[k], sec) ?? "")}"></label>`;
   const chk = (path, list) => list.map((t, i) => `<label style="flex-direction:row;gap:8px;align-items:flex-start;color:var(--text)"><input type="checkbox" data-pc="${path}" value="${esc(t)}" ${(path.split(".").reduce((o, k) => o?.[k], sec) ?? []).includes(t) ? "checked" : ""}> ${esc(t)}</label>`).join("");
   box.innerHTML = `<div class="card accent">
@@ -379,8 +397,11 @@ async function renderPlanEditor() {
     <details class="sec"><summary>9. ${SECTIONS[8].title}</summary><div class="body">${PROCESS_STEPS.map((s, i) => ta("process." + i, s, 6)).join("")}</div></details>
     <details class="sec"><summary>10. ${SECTIONS[9].title}</summary><div class="body">${ta("media", "สื่อการเรียนการสอน (หนึ่งบรรทัดต่อหนึ่งข้อ)", 3)}</div></details>
     <details class="sec"><summary>11. ${SECTIONS[10].title}</summary><div class="body">${ta("resources.inside", "แหล่งเรียนรู้ภายในโรงเรียน", 2)}${ta("resources.outside", "แหล่งเรียนรู้ภายนอกห้องเรียน", 2)}${ta("resources.local", "ภูมิปัญญาท้องถิ่น", 2)}</div></details>
-    <details class="sec"><summary>12. ${SECTIONS[11].title}</summary><div class="body"><div class="tablewrap"><table><tr><th>รายการประเมิน</th><th>วิธีการวัด</th><th>เครื่องมือวัด</th><th>เกณฑ์การประเมินผล</th></tr>
-      ${sec.assessment.map((a, i) => `<tr><td><input data-p="assessment.${i}.item" value="${esc(a.item)}"></td><td><textarea data-p="assessment.${i}.method" rows="2">${esc(a.method)}</textarea></td><td><textarea data-p="assessment.${i}.tool" rows="2">${esc(a.tool)}</textarea></td><td><textarea data-p="assessment.${i}.criteria" rows="2">${esc(a.criteria)}</textarea></td></tr>`).join("")}</table></div></div></details>
+    <details class="sec"><summary>12. ${SECTIONS[11].title}</summary><div class="body"><div class="tablewrap"><table><tr><th>รายการประเมิน</th><th>วิธีการวัด</th><th>เครื่องมือวัด</th><th>เกณฑ์การประเมินผล</th><th></th></tr>
+      ${sec.assessment.map((a, i) => `<tr><td><input data-p="assessment.${i}.item" value="${esc(a.item)}"></td><td><textarea data-p="assessment.${i}.method" rows="2">${esc(a.method)}</textarea></td><td><textarea data-p="assessment.${i}.tool" rows="2">${esc(a.tool)}</textarea></td><td><textarea data-p="assessment.${i}.criteria" rows="2">${esc(a.criteria)}</textarea></td><td><button class="btn small danger" data-act="t4-as-del" data-i="${i}">✕</button></td></tr>`).join("")}</table></div><button class="btn small" data-act="t4-as-add">+ เพิ่มรายการประเมิน</button></div></details>
+    <details class="sec"><summary>13. เอกสารแนบ (ใบงาน / เกณฑ์รูบริก) <span class="muted small">— ต่อท้ายไฟล์ Word</span></summary><div class="body">
+      ${(sec.attachments ?? []).map((a, i) => `<div class="card" style="padding:10px"><label>ชื่อเอกสาร<input data-p="attachments.${i}.title" value="${esc(a.title)}"></label><label>เนื้อหา<textarea data-p="attachments.${i}.body" rows="8">${esc(a.body)}</textarea></label><button class="btn small danger" data-act="t4-att-del" data-i="${i}">ลบเอกสารนี้</button></div>`).join("") || '<div class="muted">ยังไม่มีเอกสารแนบ</div>'}
+      <div class="row"><button class="btn small" data-act="t4-att-add">+ เพิ่มเอกสารแนบ</button><button class="btn small accent" data-act="t4-att-ai">✨ AI ร่างใบงาน + รูบริก</button></div></div></details>
     <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t4-save">บันทึกแผนนี้</button></div>
   </div>`;
 }
@@ -410,6 +431,10 @@ function render5() {
       return `<div class="item"><div><div class="t">${i + 1}. ${esc(k.label)} ${pill}</div><div class="muted small">${esc(k.last_error ?? "")}${k.last_used_at ? " · ใช้ล่าสุด " + new Date(k.last_used_at).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" }) : ""}</div></div>
       <div class="row"><button class="btn small" data-act="k-up" data-id="${k.id}">↑</button><button class="btn small" data-act="k-down" data-id="${k.id}">↓</button><button class="btn small" data-act="k-toggle" data-id="${k.id}">${k.enabled ? "ปิด" : "เปิด"}</button><button class="btn small" data-act="k-reset" data-id="${k.id}">ล้างสถานะ</button><button class="btn small danger" data-act="k-del" data-id="${k.id}">ลบ</button></div></div>`;
     }).join("") || '<div class="muted">ยังไม่มีคีย์</div>'}</div>
+  </div>
+  <div class="card"><h3>สำรอง / กู้คืนข้อมูล</h3>
+    <p class="muted small">ดาวน์โหลดโครงสร้าง หน่วย และแผนทั้งหมดเป็นไฟล์ .json เก็บไว้ (ไม่รวม API Key) และนำกลับเข้ามาได้ทุกเครื่อง</p>
+    <div class="row"><button class="btn" data-act="bk-export">⬇ สำรองข้อมูล</button><label class="btn" style="cursor:pointer">⬆ กู้คืนจากไฟล์<input id="bkFile" type="file" accept=".json,application/json" style="display:none"></label></div>
   </div>`;
 }
 
@@ -520,7 +545,64 @@ const actions = {
   },
 
   // ---- tab 4
-  "t4-pick": (b) => { S.plan = S.plans.find((p) => p.id === b.dataset.id); render4(); },
+  "close-modal": () => closeModal(),
+  "t4-view": (b) => { try { localStorage.setItem("lp_view", b.dataset.v); } catch {} render4(); },
+  "t4-up": (b) => busy(b, async () => { const i = S.plans.findIndex((p) => p.id === b.dataset.id); if (i > 0) { await swapSeq(S.plans[i], S.plans[i - 1]); await loadPlans(); render4(); } }),
+  "t4-down": (b) => busy(b, async () => { const i = S.plans.findIndex((p) => p.id === b.dataset.id); if (i >= 0 && i < S.plans.length - 1) { await swapSeq(S.plans[i], S.plans[i + 1]); await loadPlans(); render4(); } }),
+  "t4-copy": (b) => busy(b, async () => {
+    const src = S.plans.find((p) => p.id === b.dataset.id), seq = (S.plans.at(-1)?.seq ?? 0) + 1;
+    const row = must(await sb.from("lesson_plans").insert({ unit_id: S.unit.id, seq, title: src.title + " (สำเนา)", hours: src.hours, indicator_codes: src.indicator_codes, sections: JSON.parse(JSON.stringify(src.sections ?? {})) }).select().single());
+    await loadPlans(); S.plan = S.plans.find((p) => p.id === row.id); toast("คัดลอกแผนแล้ว", "ok"); render4();
+  }),
+  "t4-del-id": async (b) => {
+    if (!confirm("ลบแผนนี้?")) return;
+    try { must(await sb.from("lesson_plans").delete().eq("id", b.dataset.id)); if (S.plan?.id === b.dataset.id) S.plan = null; await loadPlans(); render4(); } catch (e) { toast(e.message, "err"); }
+  },
+  "t4-check": (b) => busy(b, checkCourse),
+  "t4-ai-all": (b) => busy(b, async () => {
+    const all = await courseIndicators(), c = S.course;
+    const unitInds = all.filter((i) => S.unit.indicator_codes.includes(i.code));
+    if (!S.plans.length) {
+      const count = Math.max(1, Math.min(40, num(S.unit.hours)));
+      toast("AI กำลังวางหัวข้อแผน...");
+      const out = await callAI(promptPlanTitles({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, indicators: unitInds, count }));
+      const list = (out.plans ?? []).slice(0, count);
+      if (!list.length) throw new Error("AI ไม่ได้ส่งรายการแผนกลับมา");
+      const valid = new Set(S.unit.indicator_codes);
+      for (let i = 0; i < list.length; i++) {
+        const codes = (list[i].indicator_codes ?? []).filter((x) => valid.has(x));
+        must(await sb.from("lesson_plans").insert({ unit_id: S.unit.id, seq: i + 1, title: String(list[i].title ?? `แผนที่ ${i + 1}`), hours: 1, indicator_codes: codes.length ? codes : S.unit.indicator_codes, sections: emptySections() }));
+      }
+      await loadPlans();
+    }
+    const todo = S.plans.filter((p) => !planDone(p)); let ok = 0, fail = 0, lastErr = "";
+    for (let i = 0; i < todo.length; i++) {
+      toast(`AI กำลังร่างแผน ${i + 1}/${todo.length}...`);
+      try { await aiDraftPlan(todo[i]); must(await sb.from("lesson_plans").update({ sections: todo[i].sections, updated_at: new Date().toISOString() }).eq("id", todo[i].id)); ok++; }
+      catch (e) { fail++; lastErr = e.message; if (/NO_KEYS|ALL_KEYS_FAILED/.test(lastErr)) break; }
+    }
+    await loadPlans(); render4();
+    toast(`ร่างสำเร็จ ${ok} แผน${fail ? ` ไม่สำเร็จ ${fail} (${lastErr}) กดปุ่มอีกครั้งเพื่อร่างที่เหลือ` : ""}`, fail ? "err" : "ok");
+  }),
+  "t4-ai-field": (b) => busy(b, async () => {
+    collectPlan();
+    const path = b.dataset.path, cur = path.split(".").reduce((o, k) => o?.[k], S.plan.sections) ?? "";
+    const all = await courseIndicators(), c = S.course;
+    const out = await callAI(promptField({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: S.plan, label: b.dataset.label, current: cur, indicators: all.filter((i) => S.plan.indicator_codes.includes(i.code)) }));
+    setPath(S.plan.sections, path, Array.isArray(out.text) ? out.text.join("\n") : String(out.text ?? ""));
+    await savePlan(); renderPlanEditor(); toast("AI เขียนหัวข้อใหม่แล้ว", "ok");
+  }),
+  "t4-as-add": () => { collectPlan(); S.plan.sections.assessment.push({ item: "รายการใหม่", method: "", tool: "", criteria: "" }); renderPlanEditor(); },
+  "t4-as-del": (b) => { collectPlan(); S.plan.sections.assessment.splice(Number(b.dataset.i), 1); renderPlanEditor(); },
+  "t4-att-add": () => { collectPlan(); (S.plan.sections.attachments ??= []).push({ title: "ใบงาน", body: "" }); renderPlanEditor(); },
+  "t4-att-del": (b) => { collectPlan(); S.plan.sections.attachments.splice(Number(b.dataset.i), 1); renderPlanEditor(); },
+  "t4-att-ai": (b) => busy(b, async () => {
+    collectPlan(); const all = await courseIndicators(), c = S.course;
+    const out = await callAI(promptAttachments({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: S.plan, indicators: all.filter((i) => S.plan.indicator_codes.includes(i.code)) }));
+    const add = (out.attachments ?? []).map((a) => ({ title: String(a.title ?? ""), body: Array.isArray(a.body) ? a.body.join("\n") : String(a.body ?? "") }));
+    (S.plan.sections.attachments ??= []).push(...add); await savePlan(); renderPlanEditor(); toast("AI ร่างเอกสารแนบแล้ว", "ok");
+  }),
+  "t4-pick": async (b) => { S.plan = S.plans.find((p) => p.id === b.dataset.id); await render4(); $("#t4edit")?.scrollIntoView?.({ behavior: "smooth" }); },
   "t4-add": (b) => busy(b, async () => {
     const seq = (S.plans.at(-1)?.seq ?? 0) + 1;
     const row = must(await sb.from("lesson_plans").insert({ unit_id: S.unit.id, seq, title: "แผนใหม่", hours: 1, indicator_codes: S.unit.indicator_codes, sections: emptySections() }).select().single());
@@ -532,32 +614,17 @@ const actions = {
     if (!confirm("ลบแผนนี้?")) return;
     must(await sb.from("lesson_plans").delete().eq("id", S.plan.id)); S.plan = null; await loadPlans(); render4();
   },
-  "t4-ai": (b) => busy(b, async () => {
-    collectPlan();
-    const all = await courseIndicators(), c = S.course;
-    const out = await callAI(promptPlan({
-      school: S.settings?.school_name, subject: subjName(c.subject_id), grade: c.grade, courseCode: c.course_code, unit: S.unit,
-      plan: S.plan, indicators: all.filter((i) => S.plan.indicator_codes.includes(i.code)),
-    }));
-    const base = emptySections();
-    const lines = (v) => Array.isArray(v) ? v.join("\n") : String(v ?? "");
-    S.plan.sections = {
-      ...base, ...out,
-      objectives: { ...base.objectives, ...out.objectives },
-      competencies: { ...base.competencies, ...out.competencies },
-      sufficiency: { ...base.sufficiency, ...out.sufficiency },
-      resources: { inside: lines(out.resources?.inside), outside: lines(out.resources?.outside) || "-", local: lines(out.resources?.local) || "-" },
-      focus: S.plan.sections.focus ?? base.focus,
-      process: Array.from({ length: 5 }, (_, i) => String(out.process?.[i] ?? "")),
-      content: lines(out.content), media: lines(out.media), traits: (out.traits ?? []).filter((t) => TRAITS.includes(t)),
-      assessment: base.assessment.map((a, i) => ({ ...a, ...(out.assessment?.[i] ?? {}), item: a.item })),
-    };
-    await savePlan(); toast("AI ร่างแผนแล้ว (ตรวจก่อนใช้จริง)", "ok"); renderPlanEditor();
-  }),
+  "t4-ai": (b) => busy(b, async () => { collectPlan(); await aiDraftPlan(S.plan); await savePlan(); toast("AI ร่างแผนแล้ว (ตรวจก่อนใช้จริง)", "ok"); renderPlanEditor(); }),
   "t4-export": (b) => busy(b, async () => { collectPlan(); await savePlan(); const m = await import("./export.js"); await m.exportPlans(await exportCtx(), [S.plan]); }),
   "t4-export-unit": (b) => busy(b, async () => { const m = await import("./export.js"); await m.exportPlans(await exportCtx(), S.plans); }),
 
   // ---- tab 5
+  "bk-export": (b) => busy(b, async () => {
+    const out = { app: "lesson-plan", version: 1, exported_at: new Date().toISOString() };
+    for (const t of BK_TABLES) out[t] = must(await sb.from(t).select("*"));
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(out)], { type: "application/json" }));
+    a.download = `lesson-plan-backup-${new Date().toISOString().slice(0, 10)}.json`; document.body.append(a); a.click(); a.remove(); toast("ดาวน์โหลดไฟล์สำรองแล้ว", "ok");
+  }),
   "s-save": (b) => busy(b, async () => {
     const row = { owner_id: S.user.id, school_name: $("#sSchool").value.trim(), teacher_name: $("#sTeacher").value.trim(), academic_year: $("#sYear").value.trim(), ai_model: $("#sModel").value.trim() || "gemini-2.5-flash", updated_at: new Date().toISOString() };
     S.settings = must(await sb.from("app_settings").upsert(row, { onConflict: "owner_id" }).select().single()); toast("บันทึกแล้ว", "ok");
@@ -604,6 +671,58 @@ function collectPlan() {
   $$("#t4edit [data-pc]").forEach((el) => { (groups[el.dataset.pc] ??= []); if (el.checked) groups[el.dataset.pc].push(el.value); });
   Object.entries(groups).forEach(([path, v]) => setPath(p.sections, path, v));
 }
+
+async function aiDraftPlan(plan) {
+  const all = await courseIndicators(), c = S.course;
+  const out = await callAI(promptPlan({
+    school: S.settings?.school_name, subject: subjName(c.subject_id), grade: c.grade, courseCode: c.course_code, unit: S.unit,
+    plan, indicators: all.filter((i) => plan.indicator_codes.includes(i.code)),
+  }));
+  const base = emptySections();
+  const lines = (v) => Array.isArray(v) ? v.join("\n") : String(v ?? "");
+  const prev = plan.sections ?? {};
+  plan.sections = {
+    ...base, ...out,
+    objectives: { ...base.objectives, ...out.objectives },
+    competencies: { ...base.competencies, ...out.competencies },
+    sufficiency: { ...base.sufficiency, ...out.sufficiency },
+    resources: { inside: lines(out.resources?.inside), outside: lines(out.resources?.outside) || "-", local: lines(out.resources?.local) || "-" },
+    focus: prev.focus ?? base.focus,
+    attachments: prev.attachments ?? [],
+    process: Array.from({ length: 5 }, (_, i) => String(out.process?.[i] ?? "")),
+    content: lines(out.content), media: lines(out.media), traits: (out.traits ?? []).filter((t) => TRAITS.includes(t)),
+    assessment: base.assessment.map((a, i) => ({ ...a, ...(out.assessment?.[i] ?? {}), item: a.item })),
+  };
+}
+async function updatePlanRow(id, patch) {
+  must(await sb.from("lesson_plans").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id));
+}
+async function swapSeq(a, b) {
+  const T = 100000 + Math.floor(Math.random() * 1000);
+  await updatePlanRow(a.id, { seq: T }); await updatePlanRow(b.id, { seq: a.seq }); await updatePlanRow(a.id, { seq: b.seq });
+}
+async function checkCourse() {
+  const ids = S.units.map((u) => u.id);
+  const plans = must(await sb.from("lesson_plans").select("unit_id,title,hours,indicator_codes,sections,status").in("unit_id", ids));
+  const probs = [];
+  const courseCodes = new Set(S.rows.flatMap((r) => r.indicator_codes ?? []));
+  const usedInUnits = new Set(S.units.flatMap((u) => u.indicator_codes ?? []));
+  const lostCodes = [...courseCodes].filter((c) => !usedInUnits.has(c));
+  if (lostCodes.length) probs.push(`ตัวชี้วัดในโครงสร้างรายวิชาที่ไม่มีหน่วยรองรับ: ${lostCodes.join(", ")}`);
+  let draftCount = 0, total = 0;
+  S.units.forEach((u) => {
+    const ps = plans.filter((p) => p.unit_id === u.id), h = sum(ps.map((p) => num(p.hours)));
+    const tag = `หน่วยที่ ${u.seq} ${u.name}`;
+    if (!ps.length) probs.push(`${tag}: ยังไม่มีแผน`);
+    else if (h !== num(u.hours)) probs.push(`${tag}: ชั่วโมงแผนรวม ${h} ไม่เท่ากับ ${u.hours}`);
+    const covered = new Set(ps.flatMap((p) => p.indicator_codes ?? []));
+    const miss = (u.indicator_codes ?? []).filter((c) => !covered.has(c));
+    if (ps.length && miss.length) probs.push(`${tag}: ตัวชี้วัดที่ไม่มีแผนรองรับ: ${miss.join(", ")}`);
+    ps.forEach((p) => { total++; if (!String(p.sections?.key_idea ?? "").trim()) draftCount++; if (!(p.indicator_codes ?? []).length) probs.push(`${tag} · "${p.title}": ยังไม่เลือกตัวชี้วัด`); });
+  });
+  if (draftCount) probs.push(`แผนที่ยังไม่มีเนื้อหา: ${draftCount} จาก ${total} แผน`);
+  openModal(`<h3>ตรวจความครบถ้วนทั้งรายวิชา</h3>${probs.length ? `<ul>${probs.map((x) => `<li>⚠ ${esc(x)}</li>`).join("")}</ul>` : "<p>✅ ครบถ้วน ไม่พบปัญหา</p>"}<div class="row"><button class="btn" data-act="close-modal">ปิด</button></div>`);
+}
 async function savePlan() {
   const p = S.plan;
   must(await sb.from("lesson_plans").update({ title: p.title, hours: p.hours, status: p.status, indicator_codes: p.indicator_codes, sections: p.sections, updated_at: new Date().toISOString() }).eq("id", p.id));
@@ -633,8 +752,29 @@ document.addEventListener("input", (e) => {
   if (t.dataset.row !== undefined && t.dataset.f) { const r = S.rows[Number(t.dataset.row)]; r[t.dataset.f] = t.type === "number" ? num(t.value) : t.value; if (t.dataset.f === "hours" || t.dataset.f === "score_weight") debounceCheck(); }
   if (t.dataset.u !== undefined && t.dataset.f) { const u = S.units[Number(t.dataset.u)]; u[t.dataset.f] = t.type === "number" ? num(t.value) : t.value; }
 });
-document.addEventListener("change", (e) => { const t = e.target; if (t.dataset.row !== undefined && t.dataset.f === "kind") { S.rows[Number(t.dataset.row)].kind = t.value; renderT2Edit(); } });
+document.addEventListener("change", async (e) => {
+  const t = e.target;
+  if (t.id === "bkFile" && t.files?.[0]) { try { await restoreBackup(t.files[0]); } catch (err) { toast(err.message, "err"); } t.value = ""; return; }
+  if (t.dataset.pid && t.dataset.pf) {
+    const f = t.dataset.pf; let v = t.value;
+    if (f === "hours") v = Math.max(1, num(v)); if (f === "planned_date" && !v) v = null;
+    try { await updatePlanRow(t.dataset.pid, { [f]: v }); const p = S.plans.find((x) => x.id === t.dataset.pid); if (p) p[f] = v; if (p && S.plan?.id === p.id) { const m = { title: "#pTitle", hours: "#pHours", status: "#pStatus" }[f]; if (m && $(m)) $(m).value = v; } if (f === "hours" || f === "status") render4(); toast("บันทึกแล้ว", "ok"); }
+    catch (err) { toast(err.message, "err"); await loadPlans(); render4(); }
+    return;
+  }
+   if (t.dataset.row !== undefined && t.dataset.f === "kind") { S.rows[Number(t.dataset.row)].kind = t.value; renderT2Edit(); } });
 // live totals while typing (no re-render, so focus is kept)
+const BK_TABLES = ["app_settings", "curriculum_structures", "course_structures", "course_structure_rows", "units", "lesson_plans"];
+async function restoreBackup(file) {
+  const j = JSON.parse(await file.text());
+  if (j.app !== "lesson-plan") throw new Error("ไม่ใช่ไฟล์สำรองของระบบนี้");
+  if (!confirm("กู้คืนข้อมูลจากไฟล์นี้? (ข้อมูลที่มี id เดียวกันจะถูกเขียนทับ)")) return;
+  for (const t of BK_TABLES) {
+    const rows = (j[t] ?? []).map((r) => ({ ...r, owner_id: S.user.id }));
+    if (rows.length) must(await sb.from(t).upsert(rows));
+  }
+  await loadAll(); toast("กู้คืนข้อมูลแล้ว", "ok");
+}
 function debounceCheck() {
   const total = S.course.total_hours, uh = sum(S.rows.map((r) => num(r.hours))), uw = sum(S.rows.map((r) => num(r.score_weight)));
   const set = (id, val, ok) => { const el = $("#" + id); if (!el) return; el.className = "stat " + (ok ? "ok" : "bad"); el.querySelector("b").textContent = val; };
