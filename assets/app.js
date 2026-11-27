@@ -60,7 +60,12 @@ function demoBanner() {
 }
 async function boot() {
   demoBanner();
-  const { data } = await sb.auth.getSession();
+  let { data } = await sb.auth.getSession();
+  const { AUTO_EMAIL, AUTO_PASS } = window.APP_CONFIG;
+  if (!data.session && AUTO_EMAIL && AUTO_PASS) {
+    const r = await sb.auth.signInWithPassword({ email: AUTO_EMAIL, password: AUTO_PASS });
+    if (r.error) $("#authMsg").textContent = "เข้าอัตโนมัติไม่สำเร็จ: " + r.error.message; else data = r.data;
+  }
   await onSession(data.session);
   sb.auth.onAuthStateChange((_e, session) => { if ((session?.user?.id ?? null) !== (S.user?.id ?? null)) onSession(session); });
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
