@@ -77,6 +77,10 @@ $("#authForm").addEventListener("submit", async (e) => {
   const { error } = await sb.auth.signInWithPassword({ email, password });
   $("#authMsg").textContent = error ? "เข้าสู่ระบบไม่สำเร็จ: " + error.message : "";
 });
+$("#googleBtn").addEventListener("click", async () => {
+  const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname } });
+  if (error) $("#authMsg").textContent = "เข้าสู่ระบบด้วย Google ไม่สำเร็จ: " + error.message;
+});
 $("#signupBtn").addEventListener("click", async () => {
   const email = $("#authEmail").value.trim(), password = $("#authPass").value;
   if (!email || password.length < 6) { $("#authMsg").textContent = "กรอกอีเมลและรหัสผ่านอย่างน้อย 6 ตัว"; return; }
