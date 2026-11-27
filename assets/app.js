@@ -60,12 +60,7 @@ function demoBanner() {
 }
 async function boot() {
   demoBanner();
-  let { data } = await sb.auth.getSession();
-  if (!data.session && sb.auth.signInAnonymously) {
-    const r = await sb.auth.signInAnonymously();
-    if (r.error) { if (!DEMO) { try { sessionStorage.setItem("lp_err", r.error.message); } catch {} location.replace("?demo=1"); return; } }
-    else data = r.data;
-  }
+  const { data } = await sb.auth.getSession();
   await onSession(data.session);
   sb.auth.onAuthStateChange((_e, session) => { if ((session?.user?.id ?? null) !== (S.user?.id ?? null)) onSession(session); });
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
