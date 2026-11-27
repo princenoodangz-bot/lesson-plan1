@@ -91,7 +91,10 @@ dialog::backdrop{background:rgba(0,0,0,.7)}
 
 /* paper preview (looks like the school's printed plan) */
 .paper{background:#fff;color:#000;max-width:794px;margin:0 auto;padding:44px 40px 56px;border-radius:6px;box-shadow:0 2px 14px rgba(0,0,0,.5);font-family:"TH Sarabun New","Sarabun",sans-serif;font-size:19px;line-height:1.35}
-.paper h3.c{text-align:center;font-size:23px;margin:0 0 6px}
+.paper h3.c{text-align:center;font-size:23px;margin:0 0 6px;color:#000}
+.paper h4{color:#000}
+.paper .hd{display:flex;justify-content:space-between;gap:12px}
+.paper p{text-align:justify;text-justify:inter-character}
 .paper h4{margin:12px 0 2px;font-size:19px}
 .paper p{margin:0}
 .paper .c{text-align:center}.paper .b{font-weight:700}

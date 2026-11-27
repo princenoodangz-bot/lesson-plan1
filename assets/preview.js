@@ -17,9 +17,11 @@ export function planPreviewHtml(ctx, plan) {
   const L = (txt, fmt) => lines(txt).map((l, i) => P(fmt ? fmt(l, i) : l, "ind2")).join("");
   const out = [];
   out.push(`<h3 class="c">แผนการจัดการเรียนรู้</h3>`);
-  out.push(P(`รายวิชา${ctx.subject}   รหัสวิชา ${c.course_code ?? ""}   ชั้นประถมศึกษาปีที่ ${c.grade}`));
-  out.push(P(`หน่วยการเรียนรู้ที่ ${u.seq}   เรื่อง ${u.name}   เวลา ${u.hours} ชั่วโมง`));
-  out.push(P(`เรื่อง ${plan.title}   เวลา ${plan.hours} ชั่วโมง`));
+  const row = (a, b) => `<div class="hd"><span>${esc(a)}</span><span>${esc(b ?? "")}</span></div>`;
+  out.push(row(`รายวิชา${ctx.subject}`, `รหัสวิชา ${c.course_code || "........"}`));
+  out.push(`<p class="c">ชั้นประถมศึกษาปีที่ ${c.grade}</p>`);
+  out.push(row(`หน่วยการเรียนรู้ที่ ${u.seq}   เรื่อง ${u.name}`, `เวลา ${u.hours} ชั่วโมง`));
+  out.push(row(`เรื่อง ${plan.title}`, `เวลา ${plan.hours} ชั่วโมง`));
   out.push(`<div class="dots"></div>`);
 
   out.push(H(1, SECTIONS[0].title));
