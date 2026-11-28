@@ -421,10 +421,10 @@ function render1() {
         <li>กดลิงก์ <a href="https://www.academic.obec.go.th/web/news/view/75" target="_blank" rel="noopener"><b>สพฐ. — มาตรฐานการเรียนรู้และตัวชี้วัด</b></a> (เปิดในแท็บใหม่) ทุกกลุ่มสาระยกเว้นคณิต/วิทย์/เทคโนโลยี</li>
         <li>คณิตศาสตร์ วิทยาศาสตร์ เทคโนโลยี ดูที่ <a href="https://www.ipst.ac.th" target="_blank" rel="noopener"><b>สสวท. (ipst.ac.th)</b></a> ค้นคำว่า “ตัวชี้วัด ฉบับปรับปรุง 2560”</li>
         <li>เลือกไฟล์ของ <b>กลุ่มสาระที่ต้องการ</b> แล้วกดดาวน์โหลด (ไฟล์ PDF หรือ Word) ไฟล์จะอยู่ในแอป “ไฟล์” ของ iPad</li>
-        <li>กลับมาหน้านี้ เลือก <b>วิชา หลักสูตร และชั้น</b> ให้ตรงกับไฟล์ แล้วกด “เลือกไฟล์” ด้านล่าง เลือกไฟล์ที่เพิ่งโหลด</li>
+        <li>กลับมาหน้านี้ เลือก <b>วิชา หลักสูตร และชั้น</b> ให้ตรงกับไฟล์ แล้วกด “เลือกไฟล์” ด้านล่าง เลือกไฟล์ที่เพิ่งโหลด (เลือกได้หลายไฟล์พร้อมกัน เช่น ไฟล์หลักสูตรกับไฟล์ประกอบอื่น ๆ)</li>
         <li>กด <b>อ่านไฟล์</b> รอสักครู่ แล้วตรวจจำนวนตัวชี้วัดในกล่องเหลือง ถ้าถูกกด “บันทึกไว้ใช้ครั้งต่อไป”</li>
       </ol><p class="muted small" style="margin:6px 0 0">ไฟล์ใหญ่เกิน 15 MB แนบไม่ได้ ให้แยกเฉพาะหน้าของชั้นนั้นก่อน ลิงก์เป็นหน้าข่าวของเว็บ ถ้าเปิดแล้วไม่เจอไฟล์ ให้ค้นชื่อกลุ่มสาระในเว็บนั้น</p></details>
-    <div class="row" style="margin-top:6px"><input type="file" id="t1file" accept="application/pdf,image/*,.docx,.txt"><button class="btn primary" data-act="t1-attach">อ่านไฟล์</button></div></div>
+    <div class="row" style="margin-top:6px"><input type="file" id="t1file" accept="application/pdf,image/*,.docx,.txt" multiple><button class="btn primary" data-act="t1-attach">อ่านไฟล์</button></div></div>
   <div id="t1prev"></div>
   <details class="card"><summary><b>นำเข้าตัวชี้วัดเอง</b> <span class="muted small">— สำหรับวิชา/ชั้น/หลักสูตรที่ยังไม่มีในระบบ</span></summary>
     <p class="muted small">คัดลอกตัวชี้วัดจากเอกสารหลักสูตรทางการหรือเอกสารของโรงเรียน (เลือกวิชา หลักสูตร ชั้น ด้านบนก่อน) มาวาง ระบบอ่านบรรทัดรูปแบบ "มาตรฐาน พ 1.1 ..." และ "ป.5/1 ..." ให้ แล้วให้ตรวจก่อนบันทึก</p>
@@ -1073,16 +1073,20 @@ async function checkKey(id) {
 }
 const actions = {
   "t1-attach": (b) => busy(b, async () => {
-    const f = $("#t1file")?.files?.[0]; if (!f) throw new Error("เลือกไฟล์ก่อน");
-    let text;
-    if (/\.docx$/i.test(f.name)) text = bodyText(await docxBody(f));
-    else if (/\.txt$/i.test(f.name)) text = await f.text();
-    else { toast("AI กำลังอ่านไฟล์ อาจใช้เวลาครู่หนึ่ง"); const part = await fileToPart(f);
-      text = await callAI(`ถอดข้อความมาตรฐานและตัวชี้วัด กลุ่มสาระ${subjName(T1.subject)} เฉพาะชั้นประถมศึกษาปีที่ ${T1.grade} จากเอกสารที่แนบ เป็นข้อความล้วน ห้ามแก้ไขถ้อยคำ ห้ามแต่งเพิ่ม รูปแบบ (ขึ้นบรรทัดใหม่ทุกสาระ มาตรฐาน และตัวชี้วัด):\nสาระที่ N ชื่อสาระ\nมาตรฐาน ท 1.1 ...\nป.${T1.grade}/1 ...\nถ้าไม่มีชั้นนี้ในเอกสารให้ตอบ NOTFOUND`, { json: false, files: [part] }); }
-    if (text.length > 200000) throw new Error("ไฟล์ยาวเกินไป");
-    const clean = String(text).replace(/[*#`>|]/g, "").replace(/^\s*[-•·]\s*/gm, "");
+    const files = [...($("#t1file")?.files ?? [])]; if (!files.length) throw new Error("เลือกไฟล์ก่อน");
+    let all = "", n = 0;
+    for (const f of files) {
+      let text;
+      if (/\.docx$/i.test(f.name)) text = bodyText(await docxBody(f));
+      else if (/\.txt$/i.test(f.name)) text = await f.text();
+      else { toast(`AI กำลังอ่านไฟล์ ${++n}/${files.length}: ${f.name}`); const part = await fileToPart(f);
+        text = await callAI(`ถอดข้อความมาตรฐานและตัวชี้วัด กลุ่มสาระ${subjName(T1.subject)} เฉพาะชั้นประถมศึกษาปีที่ ${T1.grade} จากเอกสารที่แนบ เป็นข้อความล้วน ห้ามแก้ไขถ้อยคำ ห้ามแต่งเพิ่ม รูปแบบ (ขึ้นบรรทัดใหม่ทุกสาระ มาตรฐาน และตัวชี้วัด):\nสาระที่ N ชื่อสาระ\nมาตรฐาน ท 1.1 ...\nป.${T1.grade}/1 ...\nถ้าไม่มีตัวชี้วัดของชั้นนี้ในเอกสารให้ตอบ NOTFOUND`, { json: false, files: [part] }); }
+      if (text.length > 200000) throw new Error(`${f.name} ยาวเกินไป`);
+      all += "\n" + text;
+    }
+    const clean = String(all).replace(/[*#`>|]/g, "").replace(/^\s*[-•·]\s*/gm, "");
     const r = parseCurriculumText(clean, T1.grade);
-    if (!r.indicators.length) { T1.fetchRaw = clean.slice(0, 1500); T1.fetchErr = "อ่านไฟล์แล้วไม่พบตัวชี้วัดของชั้นนี้ (ตรวจว่าเลือกวิชา/ชั้นตรงกับไฟล์)"; T1.ind = []; renderT1Prev(); return; }
+    if (!r.indicators.length) { T1.fetchRaw = clean.slice(0, 1500); T1.fetchErr = `อ่านไฟล์ ${files.length} ไฟล์แล้วไม่พบตัวชี้วัดของชั้นนี้ (ตรวจว่าเลือกวิชา/ชั้นตรงกับไฟล์)`; T1.ind = []; renderT1Prev(); return; }
     T1.fetchErr = null; T1.fetched = { ...r, expect: srcFor(subjName(T1.subject))?.expect?.[T1.grade - 1] ?? null };
     T1.ind = r.indicators; T1.std = Object.fromEntries(r.standards.map((x) => [x.standard_code, x])); renderT1Prev();
   }),
