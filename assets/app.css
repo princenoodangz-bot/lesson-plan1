@@ -13,18 +13,21 @@ h2{font-size:1.25rem} h3{font-size:1.05rem;color:var(--yellow)}
 a{color:var(--yellow)}
 
 .top{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#000;border-bottom:3px solid var(--red);position:sticky;top:0;z-index:20}
-.brand{font-weight:700;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.brand{font-weight:700;display:flex;align-items:center;gap:8px;white-space:normal;text-align:left}
 .dot{width:12px;height:12px;border-radius:50%;background:var(--yellow);display:inline-block}
 .crumb{flex:1;color:var(--yellow);font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
 
-.steps{display:flex;gap:6px;padding:10px 12px;overflow-x:auto;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:50px;z-index:15}
-.step{flex:1 0 auto;display:flex;align-items:center;gap:8px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font:inherit;cursor:pointer;white-space:nowrap}
+.steps{display:flex;flex-direction:column;gap:6px;padding:10px;overflow-y:auto;background:var(--panel);border-right:1px solid var(--line);position:sticky;top:56px;height:calc(100vh - 56px);align-self:start;z-index:15}
+.step{flex:0 0 auto;width:100%;display:flex;align-items:center;gap:8px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:inherit;cursor:pointer;white-space:nowrap}
 .step b{width:24px;height:24px;border-radius:50%;background:#000;color:var(--yellow);display:grid;place-items:center;font-size:.85rem}
 .step.active{background:var(--red);border-color:var(--red2)}
 .step.active b{background:var(--yellow);color:#000}
-.step.gear{flex:0 0 auto}
+.step.gear{margin-top:auto}
 
-main{max-width:1180px;margin:0 auto;padding:16px}
+#app:not(.hidden){display:grid;grid-template-columns:190px minmax(0,1fr);grid-template-areas:"top top" "nav main"}
+#app>.top{grid-area:top}#app>.steps{grid-area:nav}#app>main{grid-area:main;min-width:0}
+main{max-width:1180px;width:100%;margin:0 auto;padding:16px}
+@media(max-width:700px){#app:not(.hidden){grid-template-columns:56px minmax(0,1fr)}.step span{display:none}.step{justify-content:center;padding:8px 0}.steps{padding:8px 6px}}
 .tab{display:none}.tab.active{display:block}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}
 .card.accent{border-left:4px solid var(--red)}
