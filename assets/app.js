@@ -416,6 +416,14 @@ function render1() {
     <div class="row" style="margin-top:10px"><button class="btn primary" id="t1load" data-act="t1-load">ดึงมาตรฐานและตัวชี้วัด</button></div>
   </div>
   <div class="card" style="padding:10px"><b>📎 แนบไฟล์หลักสูตร</b> <span class="muted small">PDF / Word / รูป / .txt ของวิชาและชั้นที่เลือก (เช่น ไฟล์ตัวชี้วัดจาก สพฐ.) AI จะถอดเฉพาะชั้นที่เลือกให้</span>
+    <details class="card" style="padding:8px;margin:8px 0" open><summary class="small"><b>🔗 ไม่มีไฟล์? ดาวน์โหลดจากเว็บทางการ (ทำครั้งเดียวต่อวิชา/ชั้น)</b></summary>
+      <ol class="small" style="margin:6px 0 0 18px;line-height:1.7">
+        <li>กดลิงก์ <a href="https://www.academic.obec.go.th/web/news/view/75" target="_blank" rel="noopener"><b>สพฐ. — มาตรฐานการเรียนรู้และตัวชี้วัด</b></a> (เปิดในแท็บใหม่) ทุกกลุ่มสาระยกเว้นคณิต/วิทย์/เทคโนโลยี</li>
+        <li>คณิตศาสตร์ วิทยาศาสตร์ เทคโนโลยี ดูที่ <a href="https://www.ipst.ac.th" target="_blank" rel="noopener"><b>สสวท. (ipst.ac.th)</b></a> ค้นคำว่า “ตัวชี้วัด ฉบับปรับปรุง 2560”</li>
+        <li>เลือกไฟล์ของ <b>กลุ่มสาระที่ต้องการ</b> แล้วกดดาวน์โหลด (ไฟล์ PDF หรือ Word) ไฟล์จะอยู่ในแอป “ไฟล์” ของ iPad</li>
+        <li>กลับมาหน้านี้ เลือก <b>วิชา หลักสูตร และชั้น</b> ให้ตรงกับไฟล์ แล้วกด “เลือกไฟล์” ด้านล่าง เลือกไฟล์ที่เพิ่งโหลด</li>
+        <li>กด <b>อ่านไฟล์</b> รอสักครู่ แล้วตรวจจำนวนตัวชี้วัดในกล่องเหลือง ถ้าถูกกด “บันทึกไว้ใช้ครั้งต่อไป”</li>
+      </ol><p class="muted small" style="margin:6px 0 0">ไฟล์ใหญ่เกิน 15 MB แนบไม่ได้ ให้แยกเฉพาะหน้าของชั้นนั้นก่อน ลิงก์เป็นหน้าข่าวของเว็บ ถ้าเปิดแล้วไม่เจอไฟล์ ให้ค้นชื่อกลุ่มสาระในเว็บนั้น</p></details>
     <div class="row" style="margin-top:6px"><input type="file" id="t1file" accept="application/pdf,image/*,.docx,.txt"><button class="btn primary" data-act="t1-attach">อ่านไฟล์</button></div></div>
   <div id="t1prev"></div>
   <details class="card"><summary><b>นำเข้าตัวชี้วัดเอง</b> <span class="muted small">— สำหรับวิชา/ชั้น/หลักสูตรที่ยังไม่มีในระบบ</span></summary>
