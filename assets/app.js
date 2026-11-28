@@ -2,7 +2,7 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 import {
   withMaterial, stripQA, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
-  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptWorksheetImage, promptWorksheetFromText, promptMediaKit, promptRubric, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
+  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptWorksheetImage, promptWorksheetFromText, promptMediaKit, promptRubric, promptActivity, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
 } from "./template.js";
 
 const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG;
@@ -760,7 +760,7 @@ async function renderPlanEditor() {
   const allInds = await courseIndicators();
   const sel = allInds.filter((i) => p.indicator_codes.includes(i.code));
   const AIF = ["objectives.K", "objectives.P", "objectives.A", "content", "key_idea", "media", "process.0", "process.1", "process.2", "process.3", "process.4"];
-  const ta = (path, label, rows = 3) => `<label>${label}<textarea data-p="${path}" rows="${rows}">${esc(path.split(".").reduce((o, k) => o?.[k], sec) ?? "")}</textarea></label>${AIF.includes(path) ? `<button type="button" class="btn small" data-act="t4-ai-field" data-path="${path}" data-label="${esc(label)}">✨ AI เขียนหัวข้อนี้ใหม่</button>` : ""}${path.startsWith("process.") ? `<button type="button" class="btn small" data-act="t5-qa" data-path="${path}">＋ ครูถาม/นักเรียนตอบ</button>` : ""}`;
+  const ta = (path, label, rows = 3) => `<label>${label}<textarea data-p="${path}" rows="${rows}">${esc(path.split(".").reduce((o, k) => o?.[k], sec) ?? "")}</textarea></label>${AIF.includes(path) ? `<button type="button" class="btn small" data-act="t4-ai-field" data-path="${path}" data-label="${esc(label)}">✨ AI เขียนหัวข้อนี้ใหม่</button>` : ""}${path.startsWith("process.") ? `<button type="button" class="btn small" data-act="t5-qa" data-path="${path}">＋ ครูถาม/นักเรียนตอบ</button><button type="button" class="btn small accent" data-act="t5-act" data-path="${path}" data-label="${esc(label)}">＋ เพิ่มกิจกรรม (AI)</button>` : ""}`;
   const inp = (path, label) => `<label>${label}<input data-p="${path}" value="${esc(path.split(".").reduce((o, k) => o?.[k], sec) ?? "")}"></label>`;
   const chk = (path, list) => list.map((t, i) => `<label style="flex-direction:row;gap:8px;align-items:flex-start;color:var(--text)"><input type="checkbox" data-pc="${path}" value="${esc(t)}" ${(path.split(".").reduce((o, k) => o?.[k], sec) ?? []).includes(t) ? "checked" : ""}> ${esc(t)}</label>`).join("");
   box.innerHTML = `<div class="card accent">
@@ -1094,6 +1094,15 @@ async function checkKey(id) {
   KRES[id] = `<span style="color:${good ? "#2e7d32" : warn ? "var(--warn)" : "var(--red)"}"><b>${good ? "✓" : warn ? "!" : "✗"} ${esc(o.message || o.error || "ตรวจไม่สำเร็จ")}</b> <span class="muted">(${new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })})</span></span>`;
 }
 const actions = {
+  "t5-act": (b) => busy(b, async () => {
+    collectPlan(); const c = S.course, all = await courseIndicators(), sec = S.plan.sections, idx = Number(String(b.dataset.path).split(".")[1]);
+    const cur = String(sec.process?.[idx] ?? "").replace(/\s+$/, ""), nextNo = (cur.match(/^\s*\d+[.)]/gm) ?? []).length + 1;
+    const others = (sec.process ?? []).map((t, k) => k === idx || !String(t).trim() ? "" : `${PROCESS_STEPS[k]}:\n${String(t).slice(0, 500)}`).filter(Boolean).join("\n");
+    const out = await callAI(promptActivity({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: S.plan, stepName: b.dataset.label, current: cur, nextNo, others, indicators: all.filter((i) => S.plan.indicator_codes.includes(i.code)) }));
+    const add = (Array.isArray(out.text) ? out.text.join("\n") : String(out.text ?? "")).trim(); if (!add) throw new Error("AI ตอบไม่ครบ ลองใหม่");
+    const t = document.querySelector(`[data-p="${b.dataset.path}"]`); const nv = (cur ? cur + "\n" : "") + add; if (t) t.value = nv; setPath(sec, b.dataset.path, nv);
+    await savePlan(); toast(`เพิ่มกิจกรรมข้อ ${nextNo} แล้ว`, "ok"); if (t) { t.focus(); t.scrollTop = t.scrollHeight; }
+  }),
   "t4-rub-ai": (b) => busy(b, async () => {
     collectPlan(); const c = S.course, all = await courseIndicators(), sec = S.plan.sections, which = b.dataset.i === "all" ? sec.assessment.map((_, k) => k) : [Number(b.dataset.i)];
     const out = await callAI(promptRubric({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: S.plan, indicators: all.filter((i) => S.plan.indicator_codes.includes(i.code)), assessment: sec.assessment, which }));
