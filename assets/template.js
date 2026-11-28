@@ -318,3 +318,19 @@ ${lines(indicators)}
 ${extra ? "คำสั่งเพิ่มเติมจากครู: " + extra : ""}
 ตอบเป็น JSON เท่านั้น: {"title":"ใบงาน เรื่อง ...","instructions":"คำชี้แจง 1-2 ประโยค","total_score":จำนวนคะแนนรวม,"questions":[{"type":"short","q":"...","lines":2,"answer":"เฉลย"},{"type":"choice","q":"...","options":["...","...","...","..."],"answer":"ข. ..."},{"type":"tf","q":"...","answer":"ถูก"},{"type":"fill","q":"...______...","answer":"..."},{"type":"draw","q":"...","answer":"แนวทางตรวจ"}]}`;
 }
+
+export function promptWorksheetImage(ws, { theme, grade, sub }) {
+  const qs = (ws.questions ?? []).map((q, i) => {
+    const t = { short: "(เขียนตอบ มีเส้นประให้เขียน)", choice: "", tf: "(ถูก ☐  ผิด ☐)", fill: "", draw: "(กรอบเส้นประให้วาดภาพ)" }[q.type] ?? "";
+    const o = q.type === "choice" ? "\n   " + (q.options ?? []).map((x, k) => `${"กขคง"[k]}. ${x}`).join("   ") : "";
+    return `${i + 1}. ${q.q} ${t}${o}`;
+  }).join("\n");
+  return `Create ONE beautiful, colourful, child-friendly printable worksheet page (A4 portrait) for Thai primary school grade ${grade}, in a ${theme} colour theme. Clean white background, rounded boxes, cute simple cartoon illustrations related to the topic, decorative border, easy for children to read and write on.
+CRITICAL: all text is Thai. Copy every Thai word below EXACTLY, letter by letter, with correct spelling, tone marks and vowels. Do not translate, shorten, rewrite or invent any other Thai text. Use large, clear, rounded Thai font.
+Layout: big title banner at top; line for "ชื่อ-นามสกุล ........ ชั้น ........ เลขที่ ........"; instruction box; then the numbered questions each with space to write the answer (dotted lines) ; a small score box "คะแนน ..... / ${ws.total_score ?? (ws.questions ?? []).length}" at the bottom.
+TITLE: ${ws.title}
+SUBTITLE: ${sub}
+INSTRUCTIONS: คำชี้แจง: ${ws.instructions ?? ""}
+QUESTIONS:
+${qs}`;
+}

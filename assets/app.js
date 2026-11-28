@@ -2,7 +2,7 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 import {
   SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
-  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
+  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptWorksheetImage, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
 } from "./template.js";
 
 const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG;
@@ -240,6 +240,19 @@ async function callAI(prompt, { json = true, system = SYSTEM_PROMPT, files } = {
   if (!json) return out.text;
   const clean = out.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
   try { return JSON.parse(clean); } catch { throw new Error("AI ตอบไม่เป็น JSON ลองกดอีกครั้ง"); }
+}
+
+async function callImage(prompt, { aspect = "3:4" } = {}) {
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY },
+    body: JSON.stringify({ prompt, image: true, aspect }),
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(out.error || "สร้างรูปไม่สำเร็จ");
+  const bin = atob(out.image.data), u8 = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return new Blob([u8], { type: out.image.mime || "image/png" });
 }
 
 // ---------- reading images / PDFs ----------
@@ -648,7 +661,7 @@ async function renderPlanEditor() {
         <div class="row">${(a.images ?? []).map((m, k) => `<div style="position:relative"><img src="${m.data}" alt="" style="height:90px;border:1px solid var(--line);border-radius:6px"><button type="button" class="btn small danger" data-act="t4-att-imgdel" data-i="${i}" data-k="${k}" style="position:absolute;top:2px;right:2px;padding:0 6px">×</button></div>`).join("")}</div>
         <input type="file" accept="image/*" multiple data-attimg="${i}">
         <button class="btn small danger" data-act="t4-att-del" data-i="${i}">ลบเอกสารนี้</button></div>`).join("") || '<div class="muted">ยังไม่มีเอกสารแนบ</div>'}
-      <div class="card" style="padding:10px;border-style:dashed"><b class="small">🎨 ให้ AI สร้างใบงานเป็นรูปสวย ๆ ใส่ใน Word</b><div class="row" style="margin-top:6px"><label class="small" style="flex-direction:row;gap:6px;align-items:center">จำนวนข้อ<input type="number" id="wsN" value="7" min="3" max="12" style="width:70px"></label><label class="small" style="flex-direction:row;gap:6px;align-items:center">สี<select id="wsTheme" style="width:auto"><option value="blue">ฟ้า</option><option value="pink">ชมพู</option><option value="green">เขียว</option><option value="orange">ส้ม</option><option value="purple">ม่วง</option></select></label><input id="wsExtra" placeholder="ข้อความเพิ่มเติม (ถ้ามี) เช่น เน้นข้อวาดภาพ" style="flex:1;min-width:180px"><button class="btn small primary" data-act="t4-ws">🎨 สร้างใบงาน</button></div></div>
+      <div class="card" style="padding:10px;border-style:dashed"><b class="small">🎨 ให้ AI สร้างใบงานเป็นรูปสวย ๆ ใส่ใน Word</b><div class="row" style="margin-top:6px"><label class="small" style="flex-direction:row;gap:6px;align-items:center">จำนวนข้อ<input type="number" id="wsN" value="7" min="3" max="12" style="width:70px"></label><label class="small" style="flex-direction:row;gap:6px;align-items:center">แบบ<select id="wsMode" style="width:auto"><option value="img">รูปจาก AI (Gemini วาดทั้งใบ)</option><option value="card">การ์ดสะอาด (ไทยถูก 100%)</option></select></label><label class="small" style="flex-direction:row;gap:6px;align-items:center">สี<select id="wsTheme" style="width:auto"><option value="blue">ฟ้า</option><option value="pink">ชมพู</option><option value="green">เขียว</option><option value="orange">ส้ม</option><option value="purple">ม่วง</option></select></label><input id="wsExtra" placeholder="ข้อความเพิ่มเติม (ถ้ามี) เช่น เน้นข้อวาดภาพ" style="flex:1;min-width:180px"><button class="btn small primary" data-act="t4-ws">🎨 สร้างใบงาน</button></div></div>
       <div class="row"><button class="btn small" data-act="t4-att-add">+ เพิ่มเอกสารแนบ</button><button class="btn small accent" data-act="t4-att-ai">✨ AI ร่างใบงาน + รูบริก</button></div></div></details>
     <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t4-save">บันทึกแผนนี้</button><button class="btn" data-act="t4-save-next">บันทึกและไปแผนถัดไป →</button></div>
   </div>`;
@@ -1139,11 +1152,16 @@ const actions = {
   "t4-ws": (b) => busy(b, async () => {
     collectPlan(); const all = await courseIndicators(), c = S.course, p = S.plan;
     const count = Math.max(3, Math.min(12, num($("#wsN")?.value) || 7)), theme = $("#wsTheme")?.value || "blue";
-    toast("AI กำลังออกแบบใบงาน...");
+    toast("AI กำลังออกแบบข้อคำถาม...");
     const ws = await callAI(promptWorksheet({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: p, indicators: all.filter((i) => p.indicator_codes.includes(i.code)), count, extra: $("#wsExtra")?.value }));
     if (!Array.isArray(ws.questions) || !ws.questions.length) throw new Error("AI ไม่ได้ส่งข้อคำถามมา ลองใหม่อีกครั้ง");
     const m = await import("./worksheet.js"), sub = `${subjName(c.subject_id)} ป.${c.grade} · หน่วยที่ ${S.unit.seq} ${S.unit.name}`;
-    const images = await m.renderWorksheet(ws, { theme, meta: { sub } });
+    let images;
+    if (($("#wsMode")?.value ?? "img") === "img") {
+      toast("Gemini กำลังวาดรูปใบงาน อาจใช้เวลา 20-60 วินาที...");
+      const blob = await callImage(promptWorksheetImage(ws, { theme: m.THEMES[theme]?.name ?? "ฟ้า", grade: c.grade, sub }));
+      images = [await imgToData(blob, 1800)];
+    } else images = await m.renderWorksheet(ws, { theme, meta: { sub } });
     (p.sections.attachments ??= []).push({ title: String(ws.title || "ใบงาน " + p.title), body: "", images, ws });
     const key = ws.questions.map((q, i) => `${i + 1}. ${q.answer ?? "-"}`).join("\n");
     p.sections.attachments.push({ title: "เฉลย " + String(ws.title || p.title), body: key });
