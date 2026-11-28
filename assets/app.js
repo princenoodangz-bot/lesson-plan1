@@ -2,7 +2,7 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 import {
   SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
-  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
+  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
 } from "./template.js";
 
 const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG;
@@ -341,6 +341,18 @@ function scheduleChecks(READ, course, inds) {
   READ.warn?.forEach((w) => items.push({ ok: false, warn: true, t: w }));
   return items;
 }
+
+// ---------- generic "ข้อมูลจากครู" input (text + files) ----------
+const inBox = (id, ph = "พิมพ์ข้อมูลที่ครูให้มา เช่น ชื่อหัวข้อ เนื้อหาที่สอน ตัวชี้วัด หรือวางข้อความจากเอกสาร") => `<details class="card" style="padding:8px;margin:8px 0"><summary class="small"><b>📎 ข้อมูลจากครู</b> <span class="muted">ใส่แค่บางช่องก็ได้ ระบบวิเคราะห์เติมที่ขาดตามหลักสูตร</span></summary><textarea id="${id}T" rows="4" placeholder="${ph}"></textarea><label class="small">แนบไฟล์ (Word / PDF / รูป / .txt)<input type="file" id="${id}F" accept="image/*,application/pdf,.docx,.txt" multiple></label></details>`;
+async function readIn(id) {
+  let text = ($("#" + id + "T")?.value ?? "").trim(); const files = [];
+  for (const f of [...($("#" + id + "F")?.files ?? [])]) {
+    if (/\.docx$/i.test(f.name)) text += `\n--- ${f.name} ---\n` + bodyText(await docxBody(f));
+    else if (/\.txt$/i.test(f.name) || f.type === "text/plain") text += `\n--- ${f.name} ---\n` + (await f.text());
+    else files.push(await fileToPart(f));
+  }
+  return { text: text.trim(), files: files.length ? files : undefined, has: !!(text.trim() || files.length) };
+}
 let READ = null;
 
 // =====================================================================
@@ -365,6 +377,7 @@ function render1() {
   <div id="t1prev"></div>
   <details class="card"><summary><b>นำเข้าตัวชี้วัดเอง</b> <span class="muted small">— สำหรับวิชา/ชั้น/หลักสูตรที่ยังไม่มีในระบบ</span></summary>
     <p class="muted small">คัดลอกตัวชี้วัดจากเอกสารหลักสูตรทางการหรือเอกสารของโรงเรียน (เลือกวิชา หลักสูตร ชั้น ด้านบนก่อน) มาวาง ระบบอ่านบรรทัดรูปแบบ "มาตรฐาน พ 1.1 ..." และ "ป.5/1 ..." ให้ แล้วให้ตรวจก่อนบันทึก</p>
+    <div class="row" style="margin-bottom:6px"><input type="file" id="impFile" accept="image/*,application/pdf,.docx,.txt"><button class="btn small" data-act="imp-file">อ่านไฟล์ใส่ช่อง</button></div>
     <textarea id="impText" rows="8" placeholder="มาตรฐาน ท 1.1 ใช้กระบวนการอ่าน...&#10;ป.5/1 อ่านออกเสียงบทร้อยแก้ว..."></textarea>
     <label style="flex-direction:row;gap:6px;color:var(--text);margin-top:6px"><input type="checkbox" id="impAll" checked> อ่านทุกชั้น ป.1–6 ในครั้งเดียว (ไม่ติ๊ก = เฉพาะชั้นที่เลือก) และอ่านบรรทัด "สาระที่ ..." เป็นชื่อสาระ</label>
     <div class="row" style="margin-top:8px"><button class="btn" data-act="imp-parse">แปลงและตรวจ</button><button class="btn primary" data-act="imp-save">บันทึกลงระบบ</button></div><div id="impPrev" class="small" style="margin-top:8px"></div></details>
@@ -462,7 +475,7 @@ async function renderT2Edit() {
   const used = new Set(S.rows.flatMap((r) => r.indicator_codes));
   const missing = inds.filter((i) => !used.has(i.code));
   const stat = (id, label, val, ok) => `<div class="stat ${ok ? "ok" : "bad"}" id="${id}"><span class="muted small">${label}</span><b>${val}</b></div>`;
-  box.innerHTML = `<details class="card" data-dk2="read" ${READ ? "open" : ""}><summary><b>📷 อ่านโครงสร้างจากภาพ/ไฟล์</b> <span class="muted small">— มีโครงสร้างรายวิชา กำหนดการสอน หรือตารางสอนอยู่แล้ว ถ่ายรูปหรือแนบ PDF ให้ AI ถอดให้</span></summary>
+  box.innerHTML = `${inBox("st", "ข้อมูลที่ครูให้มา เช่น ชื่อหน่วยที่ต้องการ ลำดับ ชั่วโมงบางหน่วย (ใส่บางส่วนก็ได้ ปุ่ม 'ให้ AI ร่างหน่วย' จะใช้ข้อมูลนี้)")}<details class="card" data-dk2="read" ${READ ? "open" : ""}><summary><b>📷 อ่านโครงสร้างจากภาพ/ไฟล์</b> <span class="muted small">— มีโครงสร้างรายวิชา กำหนดการสอน หรือตารางสอนอยู่แล้ว ถ่ายรูปหรือแนบ PDF ให้ AI ถอดให้</span></summary>
     <p class="muted small">แนบได้หลายไฟล์ (สูงสุด 10): รูปภาพ PDF หรือไฟล์ Word (.docx) ของกำหนดการสอน ไฟล์ Word ที่เป็นตารางอ่านแบบตรงตัวไม่ต้องใช้ AI และไม่กินโควตา ระบบจับคู่ตัวชี้วัดกับรหัสจริงในฐานข้อมูลเท่านั้น</p>
     <input type="file" id="readFiles" accept="image/*,application/pdf,.docx" multiple>
     <label style="flex-direction:row;gap:6px;color:var(--text);margin-top:6px"><input type="checkbox" id="readPlans" checked> สร้างหน่วยการเรียนรู้และหัวข้อแผนรายคาบให้ด้วย (ไปเขียนแผนต่อได้เลย)</label>
@@ -507,7 +520,7 @@ async function renderT3Body() {
   const inds = await courseIndicators();
   const total = S.course.total_hours, uh = sum(S.units.map((u) => num(u.hours)));
   const canImport = !S.units.length && S.rows.some((r) => r.kind === "unit");
-  box.innerHTML = `<div class="card">
+  box.innerHTML = `${inBox("un", "ข้อมูลเกี่ยวกับหน่วย เช่น เนื้อหาหลักของแต่ละหน่วย แนวทางที่ครูต้องการ (ใส่บางหน่วยก็ได้)")}<div class="row" style="margin-bottom:8px"><button class="btn small accent" data-act="t3-fill-all">🔍 วิเคราะห์และเติมสาระสำคัญทุกหน่วยที่ว่าง</button></div><div class="card">
     <div class="row spread"><div class="check"><div class="stat ${uh === total ? "ok" : ""}"><span class="muted small">ชั่วโมงหน่วยรวม</span><b>${uh}/${total}</b></div><div class="stat"><span class="muted small">จำนวนหน่วย</span><b>${S.units.length}</b></div></div>
     <div class="row">${canImport ? '<button class="btn primary" data-act="t3-import">สร้างหน่วยจากโครงสร้างรายวิชา</button>' : ""}<button class="btn" data-act="t3-add">+ เพิ่มหน่วย</button></div></div>
     <div class="list">${S.units.map((u, i) => `
@@ -552,7 +565,7 @@ async function render4() {
   el.innerHTML = `<div class="card accent"><h2>4 · หัวข้อแผนรายคาบ (ร่างเรื่องคร่าวๆ ก่อน)</h2>
     <div class="row"><label style="flex:1">หน่วยการเรียนรู้<select id="t4u">${unitOpts}</select></label></div>
     <div class="check"><div class="stat ${ph === S.unit.hours ? "ok" : "bad"}"><span class="muted small">ชั่วโมงแผนรวม</span><b>${ph}/${S.unit.hours}</b></div><div class="stat"><span class="muted small">จำนวนแผน</span><b>${S.plans.length}</b></div><div class="stat"><span class="muted small">ร่างแล้ว</span><b>${S.plans.filter(planDone).length}/${S.plans.length}</b></div></div>
-    <div class="row" style="margin-top:10px"><button class="btn small primary" data-act="t4-add">+ เพิ่มหัวข้อ</button><button class="btn small accent" data-act="t4-ai-titles">✨ AI วางหัวข้อทั้งหน่วย</button><button class="btn small" data-act="t4-check">ตรวจความครบถ้วน</button><button class="btn small" data-act="t4-export-unit">ส่งออก Word ทั้งหน่วย</button></div></div>
+    ${inBox("ti", "พิมพ์รายการหัวข้อ/เรื่องที่ครูจะสอนในหน่วยนี้ (บรรทัดละเรื่อง) หรือแนบกำหนดการ ระบบจะคงหัวข้อของครูไว้ เติมที่ขาดให้ครบชั่วโมงและตัวชี้วัด")}<div class="row" style="margin-top:10px"><button class="btn small primary" data-act="t4-add">+ เพิ่มหัวข้อ</button><button class="btn small accent" data-act="t4-ai-titles">✨ AI วางหัวข้อทั้งหน่วย (ใช้ข้อมูลจากครูด้านล่างถ้ามี)</button><button class="btn small" data-act="t4-check">ตรวจความครบถ้วน</button><button class="btn small" data-act="t4-export-unit">ส่งออก Word ทั้งหน่วย</button></div></div>
     <div class="card"><div class="row spread"><h3>แผนในหน่วยนี้</h3><div class="row"><button class="btn small ${view === "table" ? "primary" : ""}" data-act="t4-view" data-v="table">ตาราง</button><button class="btn small ${view === "list" ? "primary" : ""}" data-act="t4-view" data-v="list">รายการ</button></div></div>
       <div style="margin-top:8px">${view === "table" ? tableHtml : listHtml}</div></div>
 `;
@@ -606,6 +619,8 @@ async function renderPlanEditor() {
       <button class="btn small" data-act="t4-preview">ดูพรีวิว</button>
       <button class="btn small" data-act="t4-export">ส่งออก Word</button>
       <button class="btn small danger" data-act="t4-del">ลบ</button></div></div>
+    ${inBox("pl", "พิมพ์สิ่งที่ครูมี เช่น จุดประสงค์ กิจกรรมที่จะสอน สื่อที่ใช้ หรือวางแผนเดิม/เนื้อหา (ใส่บางช่องก็ได้)")}
+    <div class="row"><button class="btn small primary" data-act="t5-fill">🔍 วิเคราะห์ข้อมูลจากครูแล้วเติมแผน</button><label class="small" style="flex-direction:row;gap:6px;color:var(--text)"><input type="checkbox" id="plOnly" checked> เติมเฉพาะช่องที่ว่าง (ไม่ทับที่เขียนไว้แล้ว)</label></div>
     <div class="grid" style="margin:10px 0">
       <label>เรื่อง<input id="pTitle" value="${esc(p.title)}"></label>
       <label>เวลา (ชั่วโมง)<input id="pHours" type="number" min="1" value="${p.hours}"></label>
@@ -718,8 +733,8 @@ function renderBook() {
   const b = BK.book, d = b.data, ed = $("#bkedit"); if (!ed) return;
   const sy = window.scrollY;
   const filled = (v) => (v && String(v).trim() ? "✓" : "○");
-  const ta = (path, rows = 6) => `<textarea rows="${rows}" data-bk="${path}">${esc(bkGet(d, path) ?? "")}</textarea>`;
-  const texts = BOOK_TEXTS.map(([k, t]) => `<details class="card" data-dk="t_${k}"><summary><b>${filled(d.texts?.[k])}${d.reviewed?.["t_" + k] ? "✔" : ""} ${esc(t)}</b></summary><div class="row" style="margin:8px 0"><button class="btn small primary" data-act="bk-ai-text" data-k="${k}">AI ร่างเฉพาะส่วนนี้</button><label style="flex-direction:row;gap:6px;color:var(--text)"><input type="checkbox" data-bk="reviewed.t_${k}" ${d.reviewed?.["t_" + k] ? "checked" : ""}> ตรวจแล้ว</label></div>${ta("texts." + k, 12)}</details>`).join("");
+  d.school_info ??= ""; const ta = (path, rows = 6) => `<textarea rows="${rows}" data-bk="${path}">${esc(bkGet(d, path) ?? "")}</textarea>`;
+  const texts = BOOK_TEXTS.map(([k, t]) => `<details class="card" data-dk="t_${k}"><summary><b>${filled(d.texts?.[k])}${d.reviewed?.["t_" + k] ? "✔" : ""} ${esc(t)}</b></summary><div class="row" style="margin:8px 0"><button class="btn small primary" data-act="bk-ai-text" data-k="${k}">AI ร่างเฉพาะส่วนนี้</button><label style="flex-direction:row;gap:6px;color:var(--text)"><input type="checkbox" data-bk="reviewed.t_${k}" ${d.reviewed?.["t_" + k] ? "checked" : ""}> ตรวจแล้ว</label></div>${inBox("bk_" + k, "ข้อมูลสำหรับส่วนนี้ที่ครู/โรงเรียนมี (ใส่บางส่วนก็ได้)")}${ta("texts." + k, 12)}</details>`).join("");
   const gr = [1, 2, 3, 4, 5, 6].map((g) => { const x = d.grades?.[g] ?? {}; const st = x.structure ?? [];
     return `<details class="card" data-dk="g${g}"><summary><b>${filled(x.desc)}${st.length ? "✓" : "○"}${Object.keys(x.core ?? {}).length ? "✓" : "○"}${d.reviewed?.["g" + g] ? "✔" : ""} ชั้นประถมศึกษาปีที่ ${g}</b> <span class="muted small">${st.length} แถวโครงสร้าง · ${Object.keys(x.core ?? {}).length} สาระแกนกลาง</span></summary>
       <div class="grid" style="margin:8px 0"><label>รหัสวิชา<input data-bk="grades.${g}.code" value="${esc(x.code ?? "")}"></label><label>ชื่อรายวิชา<input data-bk="grades.${g}.name" value="${esc(x.name ?? "")}"></label><label>ชั่วโมง/ปี<input type="number" data-bk="grades.${g}.hours" value="${x.hours ?? 80}"></label></div>
@@ -739,7 +754,7 @@ function renderBook() {
   const noData = !(BK.stds ?? []).length;
   ed.innerHTML = `${noData ? `<div class="card" style="border:2px solid var(--red)"><b>⚠ ยังไม่มีมาตรฐาน/ตัวชี้วัดของวิชานี้ในระบบ</b><p class="small">AI จะเขียนโดยไม่มีข้อมูลจริงอ้างอิง ไปแถบ 1 → "นำเข้าตัวชี้วัดเอง" วางมาตรฐานและตัวชี้วัด ป.1–6 จากเอกสารหลักสูตรก่อน แล้วกลับมากด AI ใหม่</p><button class="btn small" data-act="goto" data-tab="t1">ไปแถบ 1</button></div>` : ""}<div class="card accent"><h3>${esc(b.title)}</h3><div class="row"><button class="btn accent" data-act="bk-doc">ดาวน์โหลด Word ทั้งเล่ม</button><button class="btn" data-act="bk-next">ไปรายวิชา → แถบ 2</button></div>
     <div class="muted small" style="margin-top:6px">กด AI ทีละส่วน ตรวจแล้วติ๊ก "ตรวจแล้ว" ✔ = ตรวจแล้ว ✓ = มีเนื้อหา ○ = ยังว่าง</div><div class="muted small" id="bkst" style="margin-top:6px"></div></div>
-    <h3>ส่วนหน้า/ท้ายเล่ม</h3>${texts}<h3>รายชั้น ป.1–6</h3>${gr}
+    <div class="card"><b>ข้อมูลทั่วไปของโรงเรียน</b> <span class="muted small">— ใช้กับทุกส่วนของเล่ม (วิสัยทัศน์ พันธกิจ บริบทชุมชน จุดเด่นของโรงเรียน ฯลฯ ใส่เท่าที่มี)</span><textarea rows="4" data-bk="school_info" placeholder="เช่น วิสัยทัศน์ของโรงเรียน บริบทชุมชน กิจกรรมเด่น ภูมิปัญญาท้องถิ่น">${esc(d.school_info ?? "")}</textarea></div><h3>ส่วนหน้า/ท้ายเล่ม</h3>${texts}<h3>รายชั้น ป.1–6</h3>${gr}
     <details class="card" data-dk="extra"><summary><b>${d.extra.length ? "✓" : "○"} รายวิชาเพิ่มเติม (${d.extra.length})</b></summary><p class="muted small">ใช้ "ผลการเรียนรู้" แทนตัวชี้วัด</p>${exHtml}<button class="btn small" data-act="bk-ex-add">+ เพิ่มรายวิชาเพิ่มเติม</button></details>
     <details class="card" data-dk="tt"><summary><b>✓ โครงสร้างเวลาเรียนทั้งโรงเรียน</b></summary><p class="muted small">ค่าเริ่มต้นเป็นตัวอย่าง ตรวจและแก้ให้ตรงกับโรงเรียน (ช่องตัวเลข = ป.1 ถึง ป.6) แถววิชานี้จะใช้ชั่วโมงจากรายชั้นอัตโนมัติ รายวิชาเพิ่มเติมจะเพิ่มเข้าตารางเอง</p>${ttHtml}<div class="row" style="margin-top:6px"><button class="btn small" data-act="bk-tt-add">+ เพิ่มแถว</button><button class="btn small" data-act="bk-tt-reset">คืนค่าเริ่มต้น</button></div></details>`;
   $$("#bkedit details[data-dk]").forEach((x) => { if (BK.open.has(x.dataset.dk)) x.open = true; });
@@ -755,10 +770,10 @@ async function bkCtx() {
 }
 const bkMsg = (m) => { const e = $("#bkst"); if (e) e.textContent = m; };
 async function bkRetry(fn) { try { return await fn(); } catch (e) { await new Promise((r) => setTimeout(r, 2500)); return await fn(); } }
-async function bkAiText(k, c) {
+async function bkAiText(k, c, extra) {
   if (!c.inds.length) throw new Error("ยังไม่มีตัวชี้วัดของวิชานี้ในระบบ นำเข้าที่แถบ 1 ก่อน");
   const b = BK.book, cn = S.curricula.find((x) => x.id === b.curriculum_id)?.name ?? b.curriculum_id;
-  const out = await bkRetry(() => callAI(promptBookText(k, { school: S.settings?.school_name ?? "", subject: bkSub(), curriculum: cn, standards: c.stds, indicators: c.inds })));
+  const out = await bkRetry(() => callAI(promptBookText(k, { school: S.settings?.school_name ?? "", subject: bkSub(), curriculum: cn, standards: c.stds, indicators: c.inds, material: [BK.book.data.school_info, extra?.text].filter(Boolean).join("\n") }), { files: extra?.files }));
   bkSet(b.data, "texts." + k, String(out.text ?? ""));
 }
 const bkGradeInds = (g, c) => c.inds.filter((i) => new RegExp(`ป\\.${g}/`).test(i.code));
@@ -878,6 +893,14 @@ const actions = {
   goto: (b) => go(b.dataset.tab),
 
   // ---- tab 1
+  "imp-file": (b) => busy(b, async () => {
+    const f = $("#impFile")?.files?.[0]; if (!f) throw new Error("เลือกไฟล์ก่อน");
+    if (/\.docx$/i.test(f.name)) $("#impText").value = bodyText(await docxBody(f));
+    else if (/\.txt$/i.test(f.name)) $("#impText").value = await f.text();
+    else { toast("AI กำลังถอดข้อความจากไฟล์ อาจใช้เวลาครู่หนึ่ง"); const part = await fileToPart(f);
+      $("#impText").value = await callAI("ถอดข้อความมาตรฐานและตัวชี้วัดจากเอกสารที่แนบเป็นข้อความล้วน ห้ามแก้ไขถ้อยคำ รูปแบบ:\nสาระที่ N ชื่อสาระ\nมาตรฐาน พ 1.1 ...\nป.1/1 ...\nขึ้นบรรทัดใหม่ทุกมาตรฐานและทุกตัวชี้วัด ไม่ต้องมีคำอธิบายอื่น", { json: false, files: [part] }); }
+    toast("ใส่ข้อความในช่องแล้ว กด 'แปลงและตรวจ' ต่อ", "ok");
+  }),
   "imp-parse": () => {
     const all = $("#impAll")?.checked; IMP = parseCurriculumText($("#impText").value, all ? 0 : T1.grade);
     const byG = [1, 2, 3, 4, 5, 6].map((g) => [g, IMP.indicators.filter((i) => i.grade === g).length]).filter((x) => x[1]).map(([g, n]) => `ป.${g}: ${n}`).join(" · ");
@@ -958,7 +981,7 @@ const actions = {
   "t2-ai": (b) => busy(b, async () => {
     if (S.rows.length && !confirm("แทนที่แถวทั้งหมดด้วยที่ AI ร่าง?")) return;
     const inds = await courseIndicators(), c = S.course;
-    const out = await callAI(promptStructure({ subject: subjName(c.subject_id), grade: c.grade, curriculum: c.curriculum_id, totalHours: c.total_hours, semesters: c.semester_count, indicators: inds }));
+    const inp = await readIn("st"); const out = await callAI(promptStructure({ subject: subjName(c.subject_id), grade: c.grade, curriculum: c.curriculum_id, totalHours: c.total_hours, semesters: c.semester_count, indicators: inds, material: inp.text }), { files: inp.files });
     const valid = new Set(inds.map((i) => i.code));
     S.rows = (out.rows ?? []).map((r) => ({ id: uid(), kind: r.kind === "exam" ? "exam" : "unit", semester: num(r.semester) || 1, name: String(r.name ?? ""), indicator_codes: (r.indicator_codes ?? []).filter((x) => valid.has(x)), hours: Math.round(num(r.hours)), score_weight: num(r.score_weight) }));
     toast("AI ร่างแล้ว ตรวจตัวเลขแล้วกดบันทึก", "ok"); renderT2Edit();
@@ -975,9 +998,16 @@ const actions = {
     await loadUnits(); renderT3Body();
   }),
   "t3-ind": async (b) => { const i = Number(b.dataset.u); pickIndicators(await courseIndicators(), S.units[i].indicator_codes, (codes) => { S.units[i].indicator_codes = codes; renderT3Body(); }); },
+  "t3-fill-all": (b) => busy(b, async () => {
+    const inp = await readIn("un"), all = await courseIndicators(), c = S.course; let n = 0;
+    for (const u of S.units) { if ((u.key_concept ?? "").trim()) continue;
+      const out = await callAI(promptKeyIdea({ subject: subjName(c.subject_id), grade: c.grade, unit: u, indicators: all.filter((x) => u.indicator_codes.includes(x.code)), material: inp.text }), { files: inp.files });
+      u.key_concept = String(out.key_idea ?? ""); must(await sb.from("units").update({ key_concept: u.key_concept }).eq("id", u.id)); n++; }
+    toast(n ? `เติมสาระสำคัญ ${n} หน่วย` : "ทุกหน่วยมีสาระสำคัญแล้ว", "ok"); renderT3Body();
+  }),
   "t3-ai": (b) => busy(b, async () => {
     const u = S.units[Number(b.dataset.u)], all = await courseIndicators();
-    const out = await callAI(promptKeyIdea({ subject: subjName(S.course.subject_id), grade: S.course.grade, unit: u, indicators: all.filter((x) => u.indicator_codes.includes(x.code)) }));
+    const out = await callAI(promptKeyIdea({ material: (await readIn("un")).text, subject: subjName(S.course.subject_id), grade: S.course.grade, unit: u, indicators: all.filter((x) => u.indicator_codes.includes(x.code)) }));
     u.key_concept = out.key_idea ?? ""; renderT3Body();
   }),
   "t3-save": (b) => busy(b, async () => {
@@ -1019,7 +1049,7 @@ const actions = {
     const have = sum(S.plans.map((p) => num(p.hours))), count = Math.max(0, Math.min(40, num(S.unit.hours) - have));
     if (!count) throw new Error("ชั่วโมงแผนครบตามหน่วยแล้ว (เพิ่มชั่วโมงของหน่วยในแถบ 3 หรือลบหัวข้อก่อน)");
     toast("AI กำลังวางหัวข้อแผน...");
-    const out = await callAI(promptPlanTitles({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, indicators: unitInds, count }));
+    const inp = await readIn("ti"); const out = await callAI(promptPlanTitles({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, indicators: unitInds, count, material: inp.text }), { files: inp.files });
     const list = (out.plans ?? []).slice(0, count);
     if (!list.length) throw new Error("AI ไม่ได้ส่งรายการหัวข้อกลับมา");
     const valid = new Set(S.unit.indicator_codes);
@@ -1085,6 +1115,21 @@ const actions = {
     if (!confirm("ลบแผนนี้?")) return;
     must(await sb.from("lesson_plans").delete().eq("id", S.plan.id)); S.plan = null; await loadPlans(); render5();
   },
+  "t5-fill": (b) => busy(b, async () => {
+    collectPlan(); const inp = await readIn("pl"), onlyEmpty = $("#plOnly")?.checked ?? true, p = S.plan, c = S.course;
+    if (!inp.has && !onlyEmpty) throw new Error("ใส่ข้อมูลจากครูก่อน หรือติ๊กเติมเฉพาะช่องว่าง");
+    const all = await courseIndicators(), prev = JSON.parse(JSON.stringify(p.sections ?? {}));
+    const out = await callAI(promptPlanFill({ school: S.settings?.school_name, subject: subjName(c.subject_id), grade: c.grade, courseCode: c.course_code, unit: S.unit, plan: p, indicators: all.filter((i) => p.indicator_codes.includes(i.code)), current: prev, material: inp.text }), { files: inp.files });
+    const fresh = planFromOut(out, prev), merged = JSON.parse(JSON.stringify(prev)); let filled = 0;
+    for (const path of PLAN_FIELDS) { const cur = pGet(merged, path), nv = pGet(fresh, path); if (pEmpty(nv)) continue; if (!onlyEmpty || pEmpty(cur)) { pSet(merged, path, nv); if (pEmpty(cur) || String(cur) !== String(nv)) filled++; } }
+    p.sections = { ...emptySections(), ...merged }; await savePlan(); renderPlanEditor();
+    const gaps = PLAN_FIELDS.filter((f) => pEmpty(pGet(p.sections, f))), A = (out.assumptions ?? []).map(String), Q = (out.questions ?? []).map(String);
+    openModal(`<h3>ผลวิเคราะห์ข้อมูลจากครู</h3><p class="small">เติม/ปรับ ${filled} ช่อง${onlyEmpty ? " (ไม่ทับที่เขียนไว้แล้ว)" : ""} · ยังว่าง ${gaps.length} ช่อง</p>
+      ${A.length ? `<b class="small">AI สันนิษฐานเอง (ให้ครูตรวจ)</b><ul class="small">${A.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+      ${Q.length ? `<b class="small">ควรขอข้อมูลเพิ่มจากครู</b><ul class="small">${Q.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+      ${gaps.length ? `<b class="small">ช่องที่ยังว่าง</b><div class="small muted">${gaps.map(esc).join(", ")}</div>` : ""}
+      <div class="row" style="margin-top:12px"><button class="btn primary" id="mCancel">ปิด</button></div>`); $("#mCancel").onclick = closeModal;
+  }),
   "t4-ai": (b) => busy(b, async () => { collectPlan(); await aiDraftPlan(S.plan); await savePlan(); toast("AI ร่างแผนแล้ว (ตรวจก่อนใช้จริง)", "ok"); renderPlanEditor(); }),
   "t4-export": (b) => busy(b, async () => { collectPlan(); await savePlan(); const m = await import("./export.js"); await m.exportPlans(await exportCtx(), [S.plan]); }),
   "t4-export-unit": (b) => busy(b, async () => { const m = await import("./export.js"); await m.exportPlans(await exportCtx(), S.plans); }),
@@ -1138,16 +1183,9 @@ function collectPlan() {
   Object.entries(groups).forEach(([path, v]) => setPath(p.sections, path, v));
 }
 
-async function aiDraftPlan(plan) {
-  const all = await courseIndicators(), c = S.course;
-  const out = await callAI(promptPlan({
-    school: S.settings?.school_name, subject: subjName(c.subject_id), grade: c.grade, courseCode: c.course_code, unit: S.unit,
-    plan, indicators: all.filter((i) => plan.indicator_codes.includes(i.code)),
-  }));
-  const base = emptySections();
-  const lines = (v) => Array.isArray(v) ? v.join("\n") : String(v ?? "");
-  const prev = plan.sections ?? {};
-  plan.sections = {
+function planFromOut(out, prev) {
+  const base = emptySections(), lines = (v) => Array.isArray(v) ? v.join("\n") : String(v ?? "");
+  return {
     ...base, ...out,
     objectives: { ...base.objectives, ...out.objectives },
     competencies: { ...base.competencies, ...out.competencies },
@@ -1160,6 +1198,18 @@ async function aiDraftPlan(plan) {
     assessment: base.assessment.map((a, i) => ({ ...a, ...(out.assessment?.[i] ?? {}), item: a.item })),
   };
 }
+async function aiDraftPlan(plan) {
+  const all = await courseIndicators(), c = S.course;
+  const out = await callAI(promptPlan({
+    school: S.settings?.school_name, subject: subjName(c.subject_id), grade: c.grade, courseCode: c.course_code, unit: S.unit,
+    plan, indicators: all.filter((i) => plan.indicator_codes.includes(i.code)),
+  }));
+  plan.sections = planFromOut(out, plan.sections ?? {});
+}
+const PLAN_FIELDS = ["objectives.K", "objectives.P", "objectives.A", "content", "key_idea", "media", "competencies.local", "competencies.key", "sufficiency.moderation", "sufficiency.reason", "sufficiency.immunity", "sufficiency.knowledge", "sufficiency.morality", "resources.inside", "process.0", "process.1", "process.2", "process.3", "process.4", "traits", ...[0, 1, 2, 3].flatMap((i) => ["method", "tool", "criteria"].map((k) => `assessment.${i}.${k}`))];
+const pGet = (o, path) => path.split(".").reduce((x, k) => x?.[k], o);
+const pSet = (o, path, v) => { const ks = path.split("."), last = ks.pop(); ks.reduce((x, k) => (x[k] ??= {}), o)[last] = v; };
+const pEmpty = (v) => v == null || (Array.isArray(v) ? !v.length : !String(v).trim() || String(v).trim() === "-");
 async function updatePlanRow(id, patch) {
   must(await sb.from("lesson_plans").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id));
 }
@@ -1274,7 +1324,7 @@ Object.assign(actions, {
   }),
   "bk-open": (b) => { BK.book = BK.books.find((x) => x.id === b.dataset.id); render0(); },
   "bk-del": async (b) => { if (!confirm("ลบเล่มนี้?")) return; must(await sb.from("curriculum_books").delete().eq("id", b.dataset.id)); if (BK.book?.id === b.dataset.id) BK.book = null; await bkLoad(); render0(); },
-  "bk-ai-text": (b) => busy(b, async () => { const c = await bkCtx(); await bkAiText(b.dataset.k, c); bkSave(); renderBook(); }),
+  "bk-ai-text": (b) => busy(b, async () => { const c = await bkCtx(), x = await readIn("bk_" + b.dataset.k); await bkAiText(b.dataset.k, c, x); bkSave(); renderBook(); }),
   "bk-ai-core": (b) => busy(b, async () => { const c = await bkCtx(); await bkRun([[`ป.${b.dataset.g} สาระที่ ${b.dataset.n}`, () => bkAiCore(Number(b.dataset.g), b.dataset.n, c)]]); }),
   "bk-ai-struct": (b) => busy(b, async () => { const c = await bkCtx(); await bkRun([[`โครงสร้างรายวิชา ป.${b.dataset.g}`, () => bkAiStruct(Number(b.dataset.g), c)]]); }),
   "bk-ai-desc": (b) => busy(b, async () => { const c = await bkCtx(); await bkRun([[`คำอธิบายรายวิชา ป.${b.dataset.g}`, () => bkAiDesc(Number(b.dataset.g), c)]]); }),

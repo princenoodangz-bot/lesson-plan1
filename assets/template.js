@@ -75,15 +75,16 @@ export const SYSTEM_PROMPT =
   "ตอบเป็นภาษาไทยที่เป็นทางการ กระชับ ใช้งานได้จริงในห้องเรียน และตอบเป็น JSON ที่ถูกต้องเท่านั้น (ไม่มีข้อความนอก JSON) " +
   "ห้ามสร้างหรือแก้ไขรหัสตัวชี้วัดและข้อความตัวชี้วัด ให้ใช้เฉพาะที่ระบุให้เท่านั้น";
 
+export const withMaterial = (m) => (m && String(m).trim() ? `\n\nข้อมูลที่ครู/โรงเรียนให้มา (ใช้เป็นหลัก ห้ามขัดแย้งหรือตัดทิ้ง เรียบเรียงเป็นภาษาทางการของหลักสูตร และเติมเฉพาะส่วนที่ไม่มีให้สอดคล้องกับหลักสูตรแกนกลางและตัวชี้วัดที่ให้ข้างต้น):\n${String(m).slice(0, 20000)}\n` : "");
 const lines = (arr) => arr.map((i) => `- ${i.code}: ${i.description}`).join("\n");
 
-export function promptStructure({ subject, grade, curriculum, totalHours, semesters, indicators }) {
+export function promptStructure({ subject, grade, curriculum, totalHours, semesters, indicators, material }) {
   const examHours = semesters; // 1 hour per semester
   return `ออกแบบโครงสร้างรายวิชา ${subject} ชั้นประถมศึกษาปีที่ ${grade} ตามหลักสูตร ${curriculum}
 เวลาเรียนรวมทั้งปี ${totalHours} ชั่วโมง จำนวน ${semesters} ภาคเรียน
 
 ตัวชี้วัดที่ต้องครอบคลุม (ใช้เฉพาะรหัสเหล่านี้):
-${lines(indicators)}
+${lines(indicators)}${withMaterial(material)}
 
 เงื่อนไขบังคับ:
 1. แบ่งเป็นหน่วยการเรียนรู้ (kind="unit") จัดเรียงตามภาคเรียนและลำดับการเรียนรู้ที่เหมาะสม
@@ -96,10 +97,10 @@ ${lines(indicators)}
 {"rows":[{"kind":"unit","semester":1,"name":"...","indicator_codes":["รหัส"],"hours":5,"score_weight":5},{"kind":"exam","semester":1,"name":"สอบปลายภาคเรียนที่ 1","indicator_codes":[],"hours":1,"score_weight":10}]}`;
 }
 
-export function promptKeyIdea({ subject, grade, unit, indicators }) {
+export function promptKeyIdea({ subject, grade, unit, indicators, material }) {
   return `เขียน "สาระสำคัญ/ความคิดรวบยอด" ของหน่วยการเรียนรู้ "${unit.name}" วิชา${subject} ชั้นประถมศึกษาปีที่ ${grade} จำนวน ${unit.hours} ชั่วโมง
 ตัวชี้วัดของหน่วย:
-${lines(indicators)}
+${lines(indicators)}${withMaterial(material)}
 ความยาว 2-4 ประโยค เป็นภาษาที่ครูใช้ในแผนการสอน
 ตอบเป็น JSON: {"key_idea":"..."}`;
 }
@@ -135,13 +136,14 @@ ${lines(indicators)}
 
 
 // ---- extra prompts ----
-export function promptPlanTitles({ subject, grade, unit, indicators, count }) {
+export function promptPlanTitles({ subject, grade, unit, indicators, count, material }) {
   return `วางแผนการสอนรายคาบของหน่วยการเรียนรู้นี้ให้ครบ ${count} แผน (แผนละ 1 ชั่วโมง รวม ${unit.hours} ชั่วโมง)
 รายวิชา: ${subject} ชั้นประถมศึกษาปีที่ ${grade}
 หน่วย: ${unit.name}
 สาระสำคัญของหน่วย: ${unit.key_concept || "-"}
 ตัวชี้วัดของหน่วย:
-${lines(indicators)}
+${lines(indicators)}${withMaterial(material)}
+ถ้าครูให้หัวข้อมาแล้ว ให้ใช้หัวข้อของครูก่อน (คงชื่อตามที่ให้) แล้วเพิ่มเฉพาะที่ขาดให้ครอบคลุมตัวชี้วัดและครบ ${count} แผน
 เรียงลำดับเนื้อหาจากง่ายไปยาก แต่ละแผนมีเรื่องไม่ซ้ำกัน และให้ตัวชี้วัดที่เกี่ยวข้อง (ใช้รหัสจากรายการข้างต้นเท่านั้น ห้ามสร้างรหัสใหม่)
 ตอบเป็น JSON เท่านั้น: {"plans":[{"title":"เรื่องของแผน","indicator_codes":["รหัส"]}]}`;
 }
@@ -170,14 +172,14 @@ ${lines(indicators)}
 ตอบเป็น JSON เท่านั้น: {"attachments":[{"title":"ใบงาน เรื่อง ...","body":"ข้อความหลายบรรทัด ใช้ \\n แยกบรรทัด"},{"title":"เกณฑ์การให้คะแนน (รูบริก)","body":"..."}]}`;
 }
 
-export function promptCurriculumDoc({ subject, grade, curriculum, school, indicators, standards }) {
+export function promptCurriculumDoc({ subject, grade, curriculum, school, indicators, standards, material }) {
   const st = (standards ?? []).map((s) => `- ${s.standard_code}: ${s.description ?? ""}`).join("\n");
   const ind = indicators.map((i) => `- ${i.code}: ${i.description}`).join("\n");
   return `จัดทำเนื้อหาหลักสูตรสถานศึกษา${school ? ` ของ${school}` : ""} กลุ่มสาระการเรียนรู้${subject} ชั้นประถมศึกษาปีที่ ${grade} ตามหลักสูตร ${curriculum}
 มาตรฐาน:
 ${st}
 ตัวชี้วัด:
-${ind}
+${ind}${withMaterial(material)}
 
 เขียนอย่างเป็นทางการ กระชับ อ้างอิงเฉพาะมาตรฐาน/ตัวชี้วัดข้างต้น ห้ามสร้างรหัสใหม่
 ตอบเป็น JSON: {"vision":"2-3 ประโยค","course_description":"คำอธิบายรายวิชารูปแบบมาตรฐาน 1 ย่อหน้า (ศึกษา/ฝึก/อภิปราย ... เพื่อให้เกิดความรู้ ความคิด ทักษะ ... มีตัวชี้วัด รวม ${indicators.length} ตัวชี้วัด)","competencies":"สมรรถนะสำคัญและคุณลักษณะอันพึงประสงค์ที่เน้น เป็นบรรทัดละข้อ","approach":"แนวทางการจัดการเรียนรู้และวัดผลประเมินผล 3-5 ข้อ บรรทัดละข้อ"}`;
@@ -205,14 +207,14 @@ const BOOK_HINT = {
   assess_criteria: "เกณฑ์การวัดและประเมินผลการเรียนระดับประถมศึกษา: 1) การตัดสินผลการเรียน (เวลาเรียนไม่น้อยกว่าร้อยละ 80, ประเมินทุกตัวชี้วัดและผ่านไม่น้อยกว่าร้อยละ 80, ระดับ 1 ขึ้นไป, อ่านคิดวิเคราะห์เขียน คุณลักษณะ กิจกรรมผ่าน, การเลื่อนชั้น) 2) การให้ระดับผลการเรียน 8 ระดับ (4,3.5,3,2.5,2,1.5,1,0 พร้อมช่วงคะแนนร้อยละ 80-100, 75-79, 70-74, 65-69, 60-64, 55-59, 50-54, 0-49) 3) การรายงานผล 4) เกณฑ์การจบการศึกษา เขียนเป็นข้อ ๆ ตามแนวหลักสูตรแกนกลาง 2551",
   glossary: "อภิธานศัพท์ 20-25 คำที่ใช้ในกลุ่มสาระนี้ แต่ละคำเขียนเป็น: คำไทย (English term) แล้วบรรทัดถัดไปอธิบาย 1-3 ประโยค เว้นหนึ่งบรรทัดระหว่างคำ",
 };
-export function promptBookText(key, { school, subject, curriculum, standards, indicators }) {
+export function promptBookText(key, { school, subject, curriculum, standards, indicators, material }) {
   const st = (standards ?? []).map((s) => `- ${s.standard_code}: ${s.description ?? ""}`).join("\n");
   const ind = (indicators ?? []).filter((i) => key === "outcome_g3" ? /ป\.[123]\//.test(i.code) : key === "outcome_g6" ? /ป\.[456]\//.test(i.code) : false).map((i) => `- ${i.code}: ${i.description}`).join("\n");
   return `เขียนส่วน "${(BOOK_TEXTS.find((x) => x[0] === key) ?? [])[1] ?? key}" ของเอกสารประกอบหลักสูตรสถานศึกษา${school ? ` ของ${school}` : ""} กลุ่มสาระการเรียนรู้${subject} ระดับประถมศึกษา ตามหลักสูตร ${curriculum}
 มาตรฐานการเรียนรู้ของกลุ่มสาระ:
 ${st}
 ${ind ? `ตัวชี้วัดที่เกี่ยวข้อง:\n${ind}\n` : ""}
-แนวทาง: ${BOOK_HINT[key]}
+แนวทาง: ${BOOK_HINT[key]}${withMaterial(material)}
 เขียนเป็นภาษาไทยทางการแบบเอกสารหลักสูตร ห้ามสร้างรหัสมาตรฐาน/ตัวชี้วัดใหม่ ใช้เฉพาะที่ให้มา
 ตอบเป็น JSON: {"text":"เนื้อหาเต็ม ใช้ \\n ขึ้นบรรทัดใหม่"}`;
 }
@@ -243,9 +245,9 @@ ${note ? `ขอบข่ายที่ครูกำหนด: ${note}\n` : "
 ตอบเป็น JSON: {"text":"..."}`;
 }
 
-export function promptReadStructure({ subject, grade, curriculum, totalHours, semesters, indicators, withPlans, docText }) {
+export function promptReadStructure({ subject, grade, curriculum, totalHours, semesters, indicators, withPlans, docText, material }) {
   return `ภาพ/ไฟล์ที่แนบคือเอกสารของครู เช่น โครงสร้างรายวิชา กำหนดการสอน หรือตารางสอนรายสัปดาห์ วิชา${subject} ชั้นประถมศึกษาปีที่ ${grade} (หลักสูตร ${curriculum}, เวลาเรียน ${totalHours} ชั่วโมง ${semesters} ภาคเรียน)
-${docText ? `ข้อความจากไฟล์ Word (ตารางคั่นด้วย |):\n${docText.slice(0, 30000)}\n\n` : ""}อ่านเอกสารอย่างละเอียดแล้วถอดเป็นโครงสร้างรายวิชา:
+${withMaterial(material)}${docText ? `ข้อความจากไฟล์ Word (ตารางคั่นด้วย |):\n${docText.slice(0, 30000)}\n\n` : ""}อ่านเอกสารอย่างละเอียดแล้วถอดเป็นโครงสร้างรายวิชา:
 - แต่ละหน่วยการเรียนรู้ = 1 แถว kind="unit" (ชื่อหน่วย ภาคเรียน ชั่วโมง น้ำหนักคะแนน ตัวชี้วัด) ตามลำดับในเอกสาร
 - แถวสอบกลางภาค/ปลายภาค = kind="exam"
 - ตัวชี้วัด: จับคู่กับรายการรหัสจริงด้านล่างเท่านั้น (เอกสารอาจใช้เลขไทยหรือเขียนต่างเล็กน้อย) ถ้าเอกสารเขียนเป็นข้อความไม่มีรหัส ให้เลือกรหัสที่ความหมายตรงที่สุด ห้ามสร้างรหัสใหม่
@@ -265,4 +267,15 @@ ${units.map((u, i) => `${i + 1}. ${u}`).join("\n")}
 
 เสนอแผนเสริม 1 ชั่วโมง ต่อ 1 ตัวชี้วัดที่ขาด (ตัวชี้วัดที่ใกล้กันรวมเป็นแผนเดียวได้) โดยเลือกหน่วยที่เนื้อหาใกล้เคียงที่สุด ชื่อแผนเป็นหัวข้อสั้น ๆ ที่สอนแล้วบรรลุตัวชี้วัดนั้นจริง ใช้เฉพาะรหัสที่ให้มา
 ตอบเป็น JSON: {"plans":[{"title":"...","unit_index":1,"indicator_codes":["รหัส"]}]}`;
+}
+
+export function promptPlanFill(args) {
+  const { current, material } = args;
+  return promptPlan(args) + `
+
+แผนนี้ครูมีข้อมูลบางส่วนแล้ว ให้วิเคราะห์และเติมให้สมบูรณ์ตามหลักสูตร:
+ข้อมูลที่มีอยู่ในแผน (JSON, ค่าว่างคือยังไม่มี):
+${JSON.stringify(current).slice(0, 8000)}${withMaterial(material)}
+กฎ: 1) ข้อมูลของครูมาก่อน ใช้ตามที่ให้ 2) ช่องที่ครูไม่ได้ให้ ให้เขียนเติมให้สอดคล้องกับตัวชี้วัดและเรื่องของแผน 3) ห้ามสร้างรหัสตัวชี้วัดใหม่
+เพิ่มสองคีย์ใน JSON: "assumptions": [สิ่งที่คุณสันนิษฐานเองเพราะครูไม่ได้ให้ ให้ครูตรวจ], "questions": [สิ่งที่ครูควรให้ข้อมูลเพิ่มเพื่อให้แผนแม่นยำขึ้น (ถ้ามี)]`;
 }
