@@ -1074,24 +1074,19 @@ async function checkKey(id) {
 const actions = {
   "t1-attach": (b) => busy(b, async () => {
     const files = [...($("#t1file")?.files ?? [])]; if (!files.length) throw new Error("เลือกไฟล์ก่อน");
-    const TH = "๐๑๒๓๔๕๖๗๘๙", dg = (x) => String(x ?? "").replace(/[๐-๙]/g, (d) => TH.indexOf(d));
-    const stds = new Map(), inds = new Map(); let text = "", notes = [], n = 0;
+    let all = "", n = 0;
     for (const f of files) {
-      if (/\.docx$/i.test(f.name)) { text += "\n" + bodyText(await docxBody(f)); continue; }
-      if (/\.txt$/i.test(f.name)) { text += "\n" + await f.text(); continue; }
-      toast(`AI กำลังอ่านไฟล์ ${++n}: ${f.name} (ไฟล์ใหญ่ใช้เวลาสักครู่)`); const part = await fileToPart(f);
-      const o = await callAI(`อ่านเอกสารหลักสูตรที่แนบ แล้วคัดลอก "มาตรฐานการเรียนรู้" และ "ตัวชี้วัด" ของ กลุ่มสาระ${subjName(T1.subject)} เฉพาะชั้นประถมศึกษาปีที่ ${T1.grade} (รหัสลงท้าย ป.${T1.grade}/n) ตามถ้อยคำในเอกสารทุกตัวอักษร ห้ามสรุป ห้ามแต่งเพิ่ม
-ตอบ JSON: {"found":true,"standards":[{"code":"ต 1.1","strand_no":1,"strand_name":"ชื่อสาระ","description":"ข้อความมาตรฐาน"}],"indicators":[{"standard_code":"ต 1.1","no":1,"description":"ข้อความตัวชี้วัด","kind":"ระหว่างทาง หรือ ปลายทาง หรือ null"}]}
-ถ้าเอกสารไม่มีตัวชี้วัดของชั้นนี้ ตอบ {"found":false,"note":"บอกสั้น ๆ ว่าเอกสารนี้มีเนื้อหาอะไร ชั้นไหนบ้าง"}`, { files: [part] });
-      if (!o?.found) { notes.push(`${f.name}: ${o?.note ?? "ไม่พบ"}`); continue; }
-      const nc = (c) => dg(c).replace(/\s+/g, " ").replace(/([ก-ฮ])\s*(\d)/, "$1 $2").replace(/\s*\.\s*/g, ".").trim();
-      (o.standards ?? []).forEach((x) => { const c = nc(x.code); if (c && !stds.has(c)) stds.set(c, { standard_code: c, description: String(x.description ?? "").trim(), strand_no: x.strand_no ?? null, strand_name: x.strand_name ?? null }); });
-      (o.indicators ?? []).forEach((x) => { const sc = nc(x.standard_code), no = Number(dg(x.no)); if (!sc || !no) return; const code = `${sc} ป.${T1.grade}/${no}`;
-        if (!inds.has(code)) inds.set(code, { code, grade: T1.grade, standard_code: sc, description: String(x.description ?? "").trim(), kind: /ระหว่าง/.test(x.kind ?? "") ? "ระหว่างทาง" : /ปลาย/.test(x.kind ?? "") ? "ปลายทาง" : null }); });
+      let text;
+      if (/\.docx$/i.test(f.name)) text = bodyText(await docxBody(f));
+      else if (/\.txt$/i.test(f.name)) text = await f.text();
+      else { toast(`AI กำลังอ่านไฟล์ ${++n}/${files.length}: ${f.name}`); const part = await fileToPart(f);
+        text = await callAI(`ถอดข้อความมาตรฐานและตัวชี้วัด กลุ่มสาระ${subjName(T1.subject)} เฉพาะชั้นประถมศึกษาปีที่ ${T1.grade} จากเอกสารที่แนบ เป็นข้อความล้วน ห้ามแก้ไขถ้อยคำ ห้ามแต่งเพิ่ม รูปแบบ (ขึ้นบรรทัดใหม่ทุกสาระ มาตรฐาน และตัวชี้วัด):\nสาระที่ N ชื่อสาระ\nมาตรฐาน ท 1.1 ...\nป.${T1.grade}/1 ...\nถ้าไม่มีตัวชี้วัดของชั้นนี้ในเอกสารให้ตอบ NOTFOUND`, { json: false, files: [part] }); }
+      if (text.length > 200000) throw new Error(`${f.name} ยาวเกินไป`);
+      all += "\n" + text;
     }
-    if (text.trim()) { const r0 = parseCurriculumText(String(text).replace(/[*#`>|]/g, ""), T1.grade); r0.standards.forEach((x) => stds.has(x.standard_code) || stds.set(x.standard_code, x)); r0.indicators.forEach((x) => inds.has(x.code) || inds.set(x.code, x)); }
-    if (!inds.size) { T1.fetchRaw = null; T1.fetchErr = `อ่านไฟล์แล้วไม่พบตัวชี้วัด ป.${T1.grade} ของ${subjName(T1.subject)}${notes.length ? " — AI รายงานว่า: " + notes.join(" / ").slice(0, 500) : ""}`; T1.ind = []; renderT1Prev(); return; }
-    const r = { standards: [...stds.values()], indicators: [...inds.values()].sort((x, y) => x.code.localeCompare(y.code, "th", { numeric: true })) };
+    const clean = String(all).replace(/[*#`>|]/g, "").replace(/^\s*[-•·]\s*/gm, "");
+    const r = parseCurriculumText(clean, T1.grade);
+    if (!r.indicators.length) { T1.fetchRaw = clean.slice(0, 1500); T1.fetchErr = `อ่านไฟล์ ${files.length} ไฟล์แล้วไม่พบตัวชี้วัดของชั้นนี้ (ตรวจว่าเลือกวิชา/ชั้นตรงกับไฟล์)`; T1.ind = []; renderT1Prev(); return; }
     T1.fetchErr = null; T1.fetched = { ...r, expect: srcFor(subjName(T1.subject))?.expect?.[T1.grade - 1] ?? null };
     T1.ind = r.indicators; T1.std = Object.fromEntries(r.standards.map((x) => [x.standard_code, x])); renderT1Prev();
   }),
