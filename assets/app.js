@@ -483,7 +483,7 @@ async function renderT2Edit() {
   <div class="card accent">
     <div class="row spread"><h3>${esc(S.course.course_code ?? "")} ${esc(S.course.course_name)} — ${total} ชั่วโมง</h3>
     <div class="row"><button class="btn small accent" data-act="t2-ai">ให้ AI ร่างหน่วย</button><button class="btn small" data-act="t2-add">+ เพิ่มหน่วย</button><button class="btn small" data-act="t2-addexam">+ เพิ่มสอบ</button></div></div>
-    <div class="check">${stat("stH", "ชั่วโมงรวม", `${uh}/${total}`, uh === total)}${stat("stW", "คะแนนรวม", `${uw}/100`, uw === 100)}${stat("stM", "ตัวชี้วัดที่ยังไม่ถูกใช้", missing.length, missing.length === 0)}</div>
+    <div class="check">${stat("stH", "ชั่วโมงรวม (หน่วย+สอบ)", `${uh}/${total}`, uh === total)}${stat("stW", "คะแนนรวม", `${uw}/100`, uw === 100)}${stat("stM", "ตัวชี้วัดที่ยังไม่ถูกใช้", missing.length, missing.length === 0)}</div>
     ${missing.length ? `<div class="muted small">ยังไม่ถูกใช้: ${missing.map((i) => esc(i.code)).join(", ")}</div>` : ""}
     <div class="tablewrap"><table><tr><th>#</th><th>ภาค</th><th>ประเภท</th><th>ชื่อหน่วย</th><th>ตัวชี้วัด</th><th>ชม.</th><th>คะแนน</th><th></th></tr>
     ${S.rows.map((r, i) => `<tr>
@@ -518,10 +518,10 @@ async function render3() {
 async function renderT3Body() {
   const box = $("#t3body"); if (!box || !S.course) return;
   const inds = await courseIndicators();
-  const total = S.course.total_hours, uh = sum(S.units.map((u) => num(u.hours)));
+  const total = S.course.total_hours, uh = sum(S.units.map((u) => num(u.hours))), eh = sum(S.rows.filter((r) => r.kind === "exam").map((r) => num(r.hours))), left = total - uh - eh;
   const canImport = !S.units.length && S.rows.some((r) => r.kind === "unit");
   box.innerHTML = `${inBox("un", "ข้อมูลเกี่ยวกับหน่วย เช่น เนื้อหาหลักของแต่ละหน่วย แนวทางที่ครูต้องการ (ใส่บางหน่วยก็ได้)")}<div class="row" style="margin-bottom:8px"><button class="btn small accent" data-act="t3-fill-all">🔍 วิเคราะห์และเติมสาระสำคัญทุกหน่วยที่ว่าง</button></div><div class="card">
-    <div class="row spread"><div class="check"><div class="stat ${uh === total ? "ok" : ""}"><span class="muted small">ชั่วโมงหน่วยรวม</span><b>${uh}/${total}</b></div><div class="stat"><span class="muted small">จำนวนหน่วย</span><b>${S.units.length}</b></div></div>
+    <div class="row spread"><div class="check"><div class="stat"><span class="muted small">ชั่วโมงหน่วย</span><b>${uh}</b></div><div class="stat"><span class="muted small">ชั่วโมงสอบ (จากแถบ 3)</span><b>${eh}</b></div><div class="stat ${left < 0 ? "bad" : left > 0 ? "warn" : ""}"><span class="muted small">รวมหน่วย+สอบ / รายวิชา</span><b>${uh + eh}/${total}</b>${left ? `<span class="small">${left > 0 ? "ยังขาด" : "เกิน"} ${Math.abs(left)} ชม.</span>` : ""}</div><div class="stat"><span class="muted small">จำนวนหน่วย</span><b>${S.units.length}</b></div></div>
     <div class="row">${canImport ? '<button class="btn primary" data-act="t3-import">สร้างหน่วยจากโครงสร้างรายวิชา</button>' : ""}<button class="btn" data-act="t3-add">+ เพิ่มหน่วย</button></div></div>
     <div class="list">${S.units.map((u, i) => `
       <details class="sec" ${S.unit?.id === u.id ? "open" : ""}><summary>หน่วยที่ ${u.seq} ${esc(u.name)} · ${u.hours} ชม. · ภาค ${u.semester ?? "-"}</summary><div class="body">
