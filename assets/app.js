@@ -197,7 +197,14 @@ async function fetchOfficial(subject, grade, curriculum) {
 มาตรฐาน ท 1.1 ข้อความมาตรฐาน
 ป.${grade}/1 ข้อความตัวชี้วัด (ระหว่างทาง|ปลายทาง ถ้าเอกสารระบุ)
 ไม่ต้องมีคำอธิบายอื่น`;
-  const text = await callAI(prompt, { json: false, system: "คุณคัดลอกข้อความจากเอกสารหลักสูตรทางการตามต้นฉบับเท่านั้น", grounding: true });
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/curriculum-fetch`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY }, body: JSON.stringify({ prompt, system: "คุณคัดลอกข้อความจากเอกสารหลักสูตรทางการตามต้นฉบับเท่านั้น" }) });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const a = (out.attempts ?? []).slice(0, 3).map((x) => `${x.model}/${x.tools}: ${x.status} ${x.note}`).join(" | ");
+    throw new Error(`${out.error || "ดึงไม่สำเร็จ"}${a ? " — " + a : ""}`);
+  }
+  refreshQuota(); const text = out.text;
   if (/NOTFOUND/.test(text) && !/ป\.?\s*\d\s*\/\s*\d/.test(text)) return null;
   const r = parseCurriculumText(text, grade);
   return r.indicators.length ? { ...r, expect: src?.expect?.[grade - 1] ?? null } : null;
