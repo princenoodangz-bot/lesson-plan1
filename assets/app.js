@@ -415,6 +415,8 @@ function render1() {
     </div>
     <div class="row" style="margin-top:10px"><button class="btn primary" id="t1load" data-act="t1-load">ดึงมาตรฐานและตัวชี้วัด</button></div>
   </div>
+  <div class="card" style="padding:10px"><b>📎 แนบไฟล์หลักสูตร</b> <span class="muted small">PDF / Word / รูป / .txt ของวิชาและชั้นที่เลือก (เช่น ไฟล์ตัวชี้วัดจาก สพฐ.) AI จะถอดเฉพาะชั้นที่เลือกให้</span>
+    <div class="row" style="margin-top:6px"><input type="file" id="t1file" accept="application/pdf,image/*,.docx,.txt"><button class="btn primary" data-act="t1-attach">อ่านไฟล์</button></div></div>
   <div id="t1prev"></div>
   <details class="card"><summary><b>นำเข้าตัวชี้วัดเอง</b> <span class="muted small">— สำหรับวิชา/ชั้น/หลักสูตรที่ยังไม่มีในระบบ</span></summary>
     <p class="muted small">คัดลอกตัวชี้วัดจากเอกสารหลักสูตรทางการหรือเอกสารของโรงเรียน (เลือกวิชา หลักสูตร ชั้น ด้านบนก่อน) มาวาง ระบบอ่านบรรทัดรูปแบบ "มาตรฐาน พ 1.1 ..." และ "ป.5/1 ..." ให้ แล้วให้ตรวจก่อนบันทึก</p>
@@ -495,7 +497,7 @@ function renderT1Prev() {
   const box = $("#t1prev"); if (!box || !T1.ind) return;
   if (!T1.ind.length) {
     box.innerHTML = `<div class="card"><b>ยังไม่มีข้อมูลตัวชี้วัดของ ${esc(subjName(T1.subject))} ป.${T1.grade} (${esc(T1.curriculum)}) ในระบบ</b>
-      <p class="muted">${T1.fetchErr ? `<span style="color:var(--red)">ดึงอัตโนมัติไม่สำเร็จ: ${esc(T1.fetchErr)}</span><br>${T1.fetchRaw ? `<details><summary class="small">คำตอบดิบของ AI</summary><pre class="small" style="white-space:pre-wrap">${esc(T1.fetchRaw)}</pre></details>` : ""}<button class="btn small" data-act="t1-load">ลองดึงใหม่</button><br>` : ""}ต้องนำเข้าก่อนจึงจะสร้างโครงสร้างได้ ใช้ช่อง “นำเข้าตัวชี้วัดเอง” ด้านล่าง (วางข้อความจากเอกสารหลักสูตร) ตอนนี้มีข้อมูลสำเร็จรูปเฉพาะสุขศึกษาและพลศึกษา ป.1-6 หลักสูตร 2551 ปรับปรุง 2560</p></div>`;
+      <p class="muted">${T1.fetchErr ? `<span style="color:var(--red)">ดึงอัตโนมัติไม่สำเร็จ: ${esc(T1.fetchErr)}</span><br>${T1.fetchRaw ? `<details><summary class="small">คำตอบดิบของ AI</summary><pre class="small" style="white-space:pre-wrap">${esc(T1.fetchRaw)}</pre></details>` : ""}<button class="btn small" data-act="t1-load">ลองดึงใหม่</button><br>` : ""}ต้องนำเข้าก่อนจึงจะสร้างโครงสร้างได้ ใช้ช่อง “นำเข้าตัวชี้วัดเอง” ด้านล่าง (วางข้อความจากเอกสารหลักสูตร) หรือกด “อ่านไฟล์” ด้านบนเพื่อแนบไฟล์หลักสูตร (ตอนนี้มีข้อมูลสำเร็จรูปเฉพาะสุขศึกษาและพลศึกษา)</p></div>`;
     return;
   }
   const by = {}; T1.ind.forEach((i) => (by[i.standard_code] ??= []).push(i));
@@ -1062,6 +1064,21 @@ async function checkKey(id) {
   KRES[id] = `<span style="color:${good ? "#2e7d32" : warn ? "var(--warn)" : "var(--red)"}"><b>${good ? "✓" : warn ? "!" : "✗"} ${esc(o.message || o.error || "ตรวจไม่สำเร็จ")}</b> <span class="muted">(${new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })})</span></span>`;
 }
 const actions = {
+  "t1-attach": (b) => busy(b, async () => {
+    const f = $("#t1file")?.files?.[0]; if (!f) throw new Error("เลือกไฟล์ก่อน");
+    let text;
+    if (/\.docx$/i.test(f.name)) text = bodyText(await docxBody(f));
+    else if (/\.txt$/i.test(f.name)) text = await f.text();
+    else { toast("AI กำลังอ่านไฟล์ อาจใช้เวลาครู่หนึ่ง"); const part = await fileToPart(f);
+      text = await callAI(`ถอดข้อความมาตรฐานและตัวชี้วัด กลุ่มสาระ${subjName(T1.subject)} เฉพาะชั้นประถมศึกษาปีที่ ${T1.grade} จากเอกสารที่แนบ เป็นข้อความล้วน ห้ามแก้ไขถ้อยคำ ห้ามแต่งเพิ่ม รูปแบบ (ขึ้นบรรทัดใหม่ทุกสาระ มาตรฐาน และตัวชี้วัด):\nสาระที่ N ชื่อสาระ\nมาตรฐาน ท 1.1 ...\nป.${T1.grade}/1 ...\nถ้าไม่มีชั้นนี้ในเอกสารให้ตอบ NOTFOUND`, { json: false, files: [part] }); }
+    if (text.length > 200000) throw new Error("ไฟล์ยาวเกินไป");
+    const clean = String(text).replace(/[*#`>|]/g, "").replace(/^\s*[-•·]\s*/gm, "");
+    const r = parseCurriculumText(clean, T1.grade);
+    if (!r.indicators.length) { T1.fetchRaw = clean.slice(0, 1500); T1.fetchErr = "อ่านไฟล์แล้วไม่พบตัวชี้วัดของชั้นนี้ (ตรวจว่าเลือกวิชา/ชั้นตรงกับไฟล์)"; T1.ind = []; renderT1Prev(); return; }
+    T1.fetchErr = null; T1.fetched = { ...r, expect: srcFor(subjName(T1.subject))?.expect?.[T1.grade - 1] ?? null };
+    T1.ind = r.indicators; T1.std = Object.fromEntries(r.standards.map((x) => [x.standard_code, x])); renderT1Prev();
+  }),
+
   "sch-save": (b) => busy(b, async () => {
     SCH.data.draft = false;
     must(await sb.from("school_structures").upsert({ owner_id: S.user.id, curriculum_id: T1.curriculum, data: SCH.data, updated_at: new Date().toISOString() }, { onConflict: "owner_id,curriculum_id" }));
