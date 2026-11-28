@@ -16,7 +16,7 @@ const stripNum = (s) => s.replace(/^\s*(\d+[.)]|[-•])\s*/, "");
 
 export async function buildDoc(ctx, plans) {
   const D = await getDocx();
-  const { TableLayoutType, TabStopType, LeaderType, LineRuleType, Document, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, HeadingLevel, TableOfContents, Footer, PageNumber, PageBreak, VerticalAlign } = D;
+  const { ImageRun, TableLayoutType, TabStopType, LeaderType, LineRuleType, Document, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, HeadingLevel, TableOfContents, Footer, PageNumber, PageBreak, VerticalAlign } = D;
   const th = ctx.thNum;
 
   const run = (text, o = {}) => new TextRun({ text: th(text), font: FONT, size: o.size ?? SZ, bold: o.bold, italics: o.italics, color: o.color, underline: o.underline ? {} : undefined, ...o.extra });
@@ -172,6 +172,11 @@ export async function buildDoc(ctx, plans) {
         const rws = b.rows.map((r) => new TableRow({ cantSplit: true, children: r.map((t, i) => cell([para(t, i === 0 && b.head.length === 3 ? { align: AlignmentType.CENTER } : {})], b.w[i])) }));
         out.push(new Table({ width: { size: cm(b.w.reduce((x, y) => x + y)), type: WidthType.DXA }, columnWidths: b.w.map(cm), rows: [hdr, ...rws], layout: TableLayoutType.FIXED }));
         out.push(para(""));
+      });
+      (a.images ?? []).forEach((m) => {
+        const bin = atob(String(m.data).split(",")[1] ?? ""), u8 = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+        const wpx = Math.round(cm(16) / 15), hpx = Math.round(wpx * (m.h / m.w)), maxH = Math.round(cm(22) / 15), k = Math.min(1, maxH / hpx);
+        out.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 120 }, children: [new ImageRun({ type: "jpg", data: u8, transformation: { width: Math.round(wpx * k), height: Math.round(hpx * k) } })] }));
       });
     });
     return out;

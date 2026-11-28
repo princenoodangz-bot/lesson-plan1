@@ -643,7 +643,11 @@ async function renderPlanEditor() {
     <details class="sec"><summary>12. ${SECTIONS[11].title}</summary><div class="body"><div class="tablewrap"><table><tr><th>รายการประเมิน</th><th>วิธีการวัด</th><th>เครื่องมือวัด</th><th>เกณฑ์การประเมินผล</th><th></th></tr>
       ${sec.assessment.map((a, i) => `<tr><td><input data-p="assessment.${i}.item" value="${esc(a.item)}"></td><td><textarea data-p="assessment.${i}.method" rows="2">${esc(a.method)}</textarea></td><td><textarea data-p="assessment.${i}.tool" rows="2">${esc(a.tool)}</textarea></td><td><textarea data-p="assessment.${i}.criteria" rows="2">${esc(a.criteria)}</textarea></td><td><button class="btn small danger" data-act="t4-as-del" data-i="${i}">✕</button></td></tr>`).join("")}</table></div><button class="btn small" data-act="t4-as-add">+ เพิ่มรายการประเมิน</button></div></details>
     <details class="sec"><summary>13. เอกสารแนบ (ใบงาน / เกณฑ์รูบริก) <span class="muted small">— ต่อท้ายไฟล์ Word</span></summary><div class="body">
-      ${(sec.attachments ?? []).map((a, i) => `<div class="card" style="padding:10px"><label>ชื่อเอกสาร<input data-p="attachments.${i}.title" value="${esc(a.title)}"></label><label>เนื้อหา<textarea data-p="attachments.${i}.body" rows="8">${esc(a.body)}</textarea></label><button class="btn small danger" data-act="t4-att-del" data-i="${i}">ลบเอกสารนี้</button></div>`).join("") || '<div class="muted">ยังไม่มีเอกสารแนบ</div>'}
+      ${(sec.attachments ?? []).map((a, i) => `<div class="card" style="padding:10px"><label>ชื่อเอกสาร<input data-p="attachments.${i}.title" value="${esc(a.title)}"></label><label>เนื้อหา<textarea data-p="attachments.${i}.body" rows="8">${esc(a.body)}</textarea></label>
+        <div class="small muted" style="margin-top:6px">🖼 รูปใบงาน/รูปประกอบ (เช่น รูปที่ ChatGPT สร้าง) — จะแทรกท้ายเนื้อหาเต็มความกว้างหน้ากระดาษ</div>
+        <div class="row">${(a.images ?? []).map((m, k) => `<div style="position:relative"><img src="${m.data}" alt="" style="height:90px;border:1px solid var(--line);border-radius:6px"><button type="button" class="btn small danger" data-act="t4-att-imgdel" data-i="${i}" data-k="${k}" style="position:absolute;top:2px;right:2px;padding:0 6px">×</button></div>`).join("")}</div>
+        <input type="file" accept="image/*" multiple data-attimg="${i}">
+        <button class="btn small danger" data-act="t4-att-del" data-i="${i}">ลบเอกสารนี้</button></div>`).join("") || '<div class="muted">ยังไม่มีเอกสารแนบ</div>'}
       <div class="row"><button class="btn small" data-act="t4-att-add">+ เพิ่มเอกสารแนบ</button><button class="btn small accent" data-act="t4-att-ai">✨ AI ร่างใบงาน + รูบริก</button></div></div></details>
     <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t4-save">บันทึกแผนนี้</button><button class="btn" data-act="t4-save-next">บันทึกและไปแผนถัดไป →</button></div>
   </div>`;
@@ -1132,6 +1136,7 @@ const actions = {
   "t4-as-add": () => { collectPlan(); S.plan.sections.assessment.push({ item: "รายการใหม่", method: "", tool: "", criteria: "" }); renderPlanEditor(); },
   "t4-as-del": (b) => { collectPlan(); S.plan.sections.assessment.splice(Number(b.dataset.i), 1); renderPlanEditor(); },
   "t4-att-add": () => { collectPlan(); (S.plan.sections.attachments ??= []).push({ title: "ใบงาน", body: "" }); renderPlanEditor(); },
+  "t4-att-imgdel": (b) => { collectPlan(); S.plan.sections.attachments[Number(b.dataset.i)].images.splice(Number(b.dataset.k), 1); renderPlanEditor(); },
   "t4-att-del": (b) => { collectPlan(); S.plan.sections.attachments.splice(Number(b.dataset.i), 1); renderPlanEditor(); },
   "t4-att-ai": (b) => busy(b, async () => {
     collectPlan(); const all = await courseIndicators(), c = S.course;
@@ -1512,3 +1517,19 @@ boot();
   if (globalThis.MutationObserver) new globalThis.MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType === 1) { if (n.tagName === "DETAILS") { const v = st.get(key(n)); if (v !== undefined) n.open = v; } restore(n); } })))
     .observe(document.querySelector("main"), { childList: true, subtree: true });
 }
+
+// attach images to a worksheet (resized JPEG data URL stored in the plan)
+async function imgToData(file, max = 1500) {
+  const bmp = await createImageBitmap(file); const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+  return { name: file.name, data: c.toDataURL("image/jpeg", 0.82), w: c.width, h: c.height };
+}
+document.addEventListener("change", async (e) => {
+  const inp = e.target.closest?.("[data-attimg]"); if (!inp || !S.plan) return;
+  try {
+    collectPlan(); const a = S.plan.sections.attachments[Number(inp.dataset.attimg)]; a.images ??= [];
+    for (const f of [...inp.files]) a.images.push(await imgToData(f));
+    await savePlan(); renderPlanEditor(); toast(`แนบรูปแล้ว ${inp.files.length} รูป`, "ok");
+  } catch (err) { toast(err.message ?? String(err), "err"); }
+});
