@@ -294,7 +294,7 @@ export function parseAttachment(body) {
       out.push({ t: "p", text: `ระดับ ${rows[0][0]}${rows[0][1] ? ` (${rows[0][1]})` : ""}: ${rows[0][2]}` }); continue; }
     if ((L[i].match(/\|/g) ?? []).length >= 1 && L[i].trim().includes("|")) { const g = []; while (i < L.length && L[i].includes("|")) { g.push(L[i].split("|").map((c) => c.trim()).filter((c, k, a) => !(c === "" && (k === 0 || k === a.length - 1)))); i++; }
       const rows = g.filter((r) => !r.every((c) => /^[-:\s]+$/.test(c))), n = Math.max(...rows.map((r) => r.length));
-      if (rows.length >= 2 && n >= 2) { out.push({ t: "tbl", head: rows[0], rows: rows.slice(1).map((r) => Array.from({ length: n }, (_, k) => r[k] ?? "")), w: Array.from({ length: n }, () => 16 / n) }); continue; }
+      if (rows.length >= 2 && n >= 2) { out.push({ t: "tbl", head: rows[0], rows: rows.slice(1).map((r) => Array.from({ length: n }, (_, k) => r[k] ?? "")), w: (n >= 4 && rows.slice(0, 6).every((r) => r.slice(1).every((c) => String(c).length <= 14))) ? [16 - 2.0 * (n - 1), ...Array(n - 1).fill(2.0)] : Array.from({ length: n }, () => 16 / n) }); continue; }
       rows.forEach((r) => out.push({ t: "p", text: r.join(" | ") })); continue; }
     if (L[i].trim()) { const m = L[i].match(/^(.*?)\s*[.…_·]{6,}\s*$/); if (m) { if (m[1].trim()) out.push({ t: "p", text: m[1] }); out.push({ t: "dots" }); } else out.push({ t: "p", text: L[i] }); } i++;
   }

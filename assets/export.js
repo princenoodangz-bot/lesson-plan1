@@ -35,7 +35,7 @@ export async function buildDoc(ctx, plans) {
   const line = { style: BorderStyle.SINGLE, size: 4, color: "000000" };
   const cell = (children, w, o = {}) => new TableCell({
     children, width: { size: cm(w), type: WidthType.DXA }, verticalAlign: VerticalAlign.TOP,
-    margins: { top: 60, bottom: 60, left: 100, right: 100 },
+    margins: o.tight ? { top: 20, bottom: 20, left: 80, right: 80 } : { top: 60, bottom: 60, left: 100, right: 100 },
     borders: { top: line, bottom: line, left: line, right: line }, shading: o.fill ? { fill: o.fill } : undefined,
   });
 
@@ -67,6 +67,8 @@ export async function buildDoc(ctx, plans) {
       out.push(para(t, { indent: { left: cm(1.2) }, keepNext: true }));
       lines(sec.objectives?.[k]).forEach((l) => out.push(body(l, { left: cm(1.8) })));
     });
+
+    if ((sec.traits ?? []).length) { out.push(para("2.4 คุณลักษณะอันพึงประสงค์", { indent: { left: cm(1.2) }, keepNext: true })); (sec.traits ?? []).forEach((t, i) => out.push(body(`${i + 1}. ${t}`, { left: cm(1.8) }))); }
 
     // 3
     out.push(head(3, SECTIONS[2].title));
@@ -164,12 +166,13 @@ export async function buildDoc(ctx, plans) {
     // attachments (worksheets / rubric)
     (sec.attachments ?? []).forEach((a, ai) => {
       if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim() && !(a.images ?? []).length) return;
-      out.push(para(`เอกสารแนบที่ ${ai + 1}  ${a.title ?? ""}`, { bold: true, align: AlignmentType.CENTER, pageBreakBefore: true, line: 240 }));
+      const zs = a.compact ? (String(a.body ?? "").split("\n").length > 20 ? 21 : 24) : undefined;
+      out.push(para(`เอกสารแนบที่ ${ai + 1}  ${a.title ?? ""}`, { bold: true, align: AlignmentType.CENTER, pageBreakBefore: true, line: 240, size: zs }));
       ((a.images ?? []).length ? [] : parseAttachment(a.body)).forEach((b) => {
         if (b.t === "dots") return out.push(dl());
-        if (b.t === "p") return out.push(para(b.text, { indent: { left: cm(0.6) } }));
-        const hdr = new TableRow({ tableHeader: true, children: b.head.map((t, i) => cell([para(t, { bold: true, align: AlignmentType.CENTER })], b.w[i], { fill: "F2F2F2" })) });
-        const rws = b.rows.map((r) => new TableRow({ cantSplit: true, children: r.map((t, i) => cell([para(t, i === 0 && b.head.length === 3 ? { align: AlignmentType.CENTER } : {})], b.w[i])) }));
+        if (b.t === "p") return out.push(para(b.text, { indent: { left: cm(0.6) }, size: zs, line: a.compact ? 230 : undefined }));
+        const hdr = new TableRow({ tableHeader: true, children: b.head.map((t, i) => cell([para(t, { bold: true, align: AlignmentType.CENTER, size: zs })], b.w[i], { fill: "F2F2F2" })) });
+        const rws = b.rows.map((r) => new TableRow({ cantSplit: true, children: r.map((t, i) => cell([para(t, { ...(i === 0 && b.head.length === 3 ? { align: AlignmentType.CENTER } : i > 0 && a.compact ? { align: AlignmentType.CENTER } : {}), size: zs, line: a.compact ? 230 : undefined })], b.w[i], a.compact ? { tight: true } : {})) }));
         out.push(new Table({ width: { size: cm(b.w.reduce((x, y) => x + y)), type: WidthType.DXA }, columnWidths: b.w.map(cm), rows: [hdr, ...rws], layout: TableLayoutType.FIXED }));
         out.push(para(""));
       });

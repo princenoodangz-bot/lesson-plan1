@@ -33,6 +33,7 @@ export function planPreviewHtml(ctx, plan) {
   [["2.1 ด้านความรู้ ความเข้าใจ (K)", "K"], ["2.2 ด้านทักษะกระบวนการ (P)", "P"], ["2.3 ด้านคุณลักษณะ (A)", "A"]].forEach(([t, k]) => {
     out.push(P(t, "ind1")); out.push(L(sec.objectives?.[k]) || `<p class="ph ind2">(ว่าง)</p>`);
   });
+  if ((sec.traits ?? []).length) { out.push(P("2.4 คุณลักษณะอันพึงประสงค์", "ind1")); out.push((sec.traits ?? []).map((t, i) => P(`${i + 1}. ${t}`, "ind2")).join("")); }
 
   out.push(H(3, SECTIONS[2].title)); out.push(`<p class="b ind1">สาระการเรียนรู้</p>`);
   out.push(L(sec.content, (l) => `- ${stripNum(l)}`) || `<p class="ph ind2">(ว่าง)</p>`);

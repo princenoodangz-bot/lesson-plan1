@@ -1,5 +1,6 @@
 const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+import { traitFormBody } from "./traits.js";
 import {
   withMaterial, stripQA, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
   emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptWorksheetImage, promptWorksheetFromText, promptMediaKit, promptRubric, promptActivity, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
@@ -492,6 +493,7 @@ function renderSchool() {
   schTotals();
 }
 document.addEventListener("change", (e) => {
+  if (e.target?.dataset?.pc === "traits") { const v = [...document.querySelectorAll('[data-pc="traits"]')].filter((x) => x.checked).map((x) => x.value); const el = document.getElementById("traitsInfo"); if (el) el.textContent = "คุณลักษณะอันพึงประสงค์ (จากข้อ 5): " + (v.join(", ") || "ยังไม่ได้เลือก"); }
   const t = e.target; if (!t?.dataset?.sch || !SCH.data) return; const D = SCH.data, d = t.dataset, i = Number(d.i), v = t.value; D.draft = false;
   if (d.sch === "t") (D.time[d.s] ??= [0, 0, 0, 0, 0, 0])[Number(d.g)] = Number(v) || 0;
   else if (d.sch === "an") D.acts[i].name = v;
@@ -737,13 +739,18 @@ function wsPanel(a, i) {
 const RUB_NAMES = ["พุทธิพิสัย (K)", "ทักษะ/กระบวนการ (P)", "จิตพิสัย (A)", "คุณลักษณะอันพึงประสงค์"];
 const rubName = (sec, i) => sec.assessment?.[i]?.item || RUB_NAMES[i] || `รายการที่ ${i + 1}`;
 const rubTitle = (sec, i) => `เกณฑ์การประเมิน${rubName(sec, i)}`;
+const isTraitItem = (sec, i) => /คุณลักษณะ/.test(rubName(sec, i));
 function rubricSection(sec, i) {
-  sec.rubric ??= []; sec.rubric[i] ??= ""; const att = (sec.attachments ?? []).some((a) => a.title === rubTitle(sec, i)), as = sec.assessment?.[i] ?? {};
-  return `<details class="sec" ${sec.rubric[i] ? "open" : ""}><summary>${14 + i}. เกณฑ์การประเมิน: ${esc(rubName(sec, i))} ${att ? '<span class="pill ok">แนบ Word แล้ว</span>' : sec.rubric[i] ? '<span class="pill warn">ยังไม่แนบ Word</span>' : ""}</summary><div class="body">
+  sec.rubric ??= []; sec.rubric[i] ??= ""; const att = (sec.attachments ?? []).some((a) => a.title === rubTitle(sec, i)), as = sec.assessment?.[i] ?? {}, tr = isTraitItem(sec, i);
+  const pill = att ? '<span class="pill ok">แนบ Word แล้ว</span>' : '<span class="pill bad">ยังไม่แนบ Word</span>';
+  const aiBtn = tr ? '<button type="button" class="btn small accent" data-act="t4-trait-form">📝 สร้างแบบประเมินจากข้อ 5 (1 หน้า A4)</button>'
+    : `<button type="button" class="btn small accent" data-act="t4-rub-ai" data-i="${i}">✨ AI เขียนเกณฑ์ข้อนี้</button>${i === 0 ? '<button type="button" class="btn small accent" data-act="t4-rub-ai" data-i="all">✨ AI เขียนทุกรายการ</button>' : ""}`;
+  return `<details class="sec" ${sec.rubric[i] ? "open" : ""}><summary>${14 + i}. ${tr ? "แบบประเมิน" : "เกณฑ์การประเมิน"}: ${esc(rubName(sec, i))} ${pill}</summary><div class="body">
     <div class="muted small">วิธีวัด: ${esc(as.method || "-")} · เครื่องมือ: ${esc(as.tool || "-")}</div>
-    <label>ตารางเกณฑ์ (คั่นช่องด้วย | บรรทัดแรกเป็นหัวตาราง)<textarea data-p="rubric.${i}" rows="9" placeholder="กด AI เขียนเกณฑ์ หรือพิมพ์เอง">${esc(sec.rubric[i])}</textarea></label>
-    <div class="row"><button type="button" class="btn small accent" data-act="t4-rub-ai" data-i="${i}">✨ AI เขียนเกณฑ์ข้อนี้</button>${i === 0 ? '<button type="button" class="btn small accent" data-act="t4-rub-ai" data-i="all">✨ AI เขียนทุกรายการ</button>' : ""}<button type="button" class="btn small primary" data-act="t4-rub-att" data-i="${i}">＋ แนบต่อท้ายไฟล์ Word</button></div>
-    <div class="muted small">แก้เกณฑ์แล้วกด "แนบ" อีกครั้งเพื่ออัปเดตในไฟล์ Word</div></div></details>`;
+    ${tr ? '<div class="muted small">แบบประเมินสร้างจากคุณลักษณะที่เลือกในข้อ 5 ตามแนวทางของ สพฐ. (ตัวชี้วัด/พฤติกรรมบ่งชี้ + ระดับ 0–3)</div>' : ""}
+    <label>${tr ? "แบบประเมิน" : "ตารางเกณฑ์"} (คั่นช่องด้วย | บรรทัดแรกเป็นหัวตาราง)<textarea data-p="rubric.${i}" rows="9" placeholder="${tr ? "กดปุ่มสร้างแบบประเมินจากข้อ 5 หรือพิมพ์เอง" : "กด AI เขียนเกณฑ์ หรือพิมพ์เอง"}">${esc(sec.rubric[i])}</textarea></label>
+    <div class="row">${aiBtn}<button type="button" class="btn small ${att ? "green" : "danger"}" data-act="t4-rub-att" data-i="${i}">${att ? "✔ แนบแล้ว (กดเพื่ออัปเดตใน Word)" : "＋ แนบต่อท้ายไฟล์ Word"}</button></div>
+    <div class="muted small">แก้แล้วกด "แนบ" อีกครั้งเพื่ออัปเดตในไฟล์ Word</div></div></details>`;
 }
 function mediaKitPanel(sec) {
   const kit = sec.media_kit ?? []; if (!kit.length) return "";
@@ -780,7 +787,7 @@ async function renderPlanEditor() {
       <div class="chips">${p.indicator_codes.map((c) => `<span class="chip">${esc(c)}</span>`).join("") || '<span class="muted">ยังไม่ได้เลือกตัวชี้วัด</span>'}</div>
       <div class="autotext">${esc(sel.map((i) => `${i.code} ${i.description}`).join("\n"))}</div>
       <button class="btn small" data-act="t4-ind">เลือกตัวชี้วัดของแผนนี้ (จากหน่วย)</button></div></details>
-    <details class="sec"><summary>2. ${SECTIONS[1].title}</summary><div class="body">${ta("objectives.K", "ด้านความรู้ ความเข้าใจ (K)", 2)}${ta("objectives.P", "ด้านทักษะกระบวนการ (P)", 2)}${ta("objectives.A", "ด้านคุณลักษณะ (A)", 2)}</div></details>
+    <details class="sec"><summary>2. ${SECTIONS[1].title}</summary><div class="body"><div class="muted small" id="traitsInfo">คุณลักษณะอันพึงประสงค์ (จากข้อ 5): ${esc((sec.traits ?? []).join(", ") || "ยังไม่ได้เลือก")}</div>${ta("objectives.K", "ด้านความรู้ ความเข้าใจ (K)", 2)}${ta("objectives.P", "ด้านทักษะกระบวนการ (P)", 2)}${ta("objectives.A", "ด้านคุณลักษณะ (A)", 2)}</div></details>
     <details class="sec"><summary>3. ${SECTIONS[2].title}</summary><div class="body">${ta("content", "สาระการเรียนรู้ (หนึ่งบรรทัดต่อหนึ่งข้อ)", 3)}</div></details>
     <details class="sec"><summary>4. ${SECTIONS[3].title}</summary><div class="body">${ta("key_idea", "สาระสำคัญ", 4)}</div></details>
     <details class="sec"><summary>5. ${SECTIONS[4].title}</summary><div class="body">${chk("traits", TRAITS)}</div></details>
@@ -1104,17 +1111,23 @@ const actions = {
     await savePlan(); toast(`เพิ่มกิจกรรมข้อ ${nextNo} แล้ว`, "ok"); if (t) { t.focus(); t.scrollTop = t.scrollHeight; }
   }),
   "t4-rub-ai": (b) => busy(b, async () => {
-    collectPlan(); const c = S.course, all = await courseIndicators(), sec = S.plan.sections, which = b.dataset.i === "all" ? sec.assessment.map((_, k) => k) : [Number(b.dataset.i)];
+    collectPlan(); const c = S.course, all = await courseIndicators(), sec = S.plan.sections, which = b.dataset.i === "all" ? sec.assessment.map((_, k) => k).filter((k) => !isTraitItem(sec, k)) : [Number(b.dataset.i)];
     const out = await callAI(promptRubric({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: S.plan, indicators: all.filter((i) => S.plan.indicator_codes.includes(i.code)), assessment: sec.assessment, which }));
     if (!Array.isArray(out.rubrics) || !out.rubrics.length) throw new Error("AI ตอบไม่ครบ ลองใหม่");
     sec.rubric ??= []; let n = 0;
     out.rubrics.forEach((r) => { const k = Number(r.index); if (which.includes(k) && r.table) { sec.rubric[k] = stripQA(Array.isArray(r.table) ? r.table.join("\n") : r.table); n++; } });
     if (!n) throw new Error("AI ตอบไม่ตรงรายการ ลองใหม่"); await savePlan(); renderPlanEditor(); toast(`AI เขียนเกณฑ์ ${n} รายการแล้ว ตรวจแล้วกด "แนบต่อท้ายไฟล์ Word"`, "ok");
   }),
+  "t4-trait-form": (b) => busy(b, async () => {
+    collectPlan(); const sec = S.plan.sections, i = (sec.assessment ?? []).findIndex((_, k) => isTraitItem(sec, k));
+    if (i < 0) throw new Error("ไม่พบรายการคุณลักษณะในตารางข้อ 12"); const body = traitFormBody(sec.traits);
+    if (!body) throw new Error("ยังไม่ได้เลือกคุณลักษณะในข้อ 5 ติ๊กเลือกก่อน");
+    sec.rubric ??= []; sec.rubric[i] = body; await savePlan(); renderPlanEditor(); toast("สร้างแบบประเมินคุณลักษณะแล้ว ตรวจแล้วกด แนบต่อท้ายไฟล์ Word", "ok");
+  }),
   "t4-rub-att": (b) => busy(b, async () => {
     collectPlan(); const sec = S.plan.sections, i = Number(b.dataset.i), body = String(sec.rubric?.[i] ?? "").trim();
     if (!body) throw new Error("ยังไม่มีเกณฑ์ในข้อนี้ กด AI เขียนเกณฑ์ก่อน"); const title = rubTitle(sec, i), ex = sec.attachments.find((a) => a.title === title);
-    if (ex) { ex.body = body; ex.images = ex.images ?? []; } else sec.attachments.push({ title, body });
+    const cp = isTraitItem(sec, i); if (ex) { ex.body = body; ex.images = ex.images ?? []; ex.compact = cp; } else sec.attachments.push({ title, body, compact: cp });
     await savePlan(); renderPlanEditor(); toast("แนบเกณฑ์ต่อท้ายไฟล์ Word แล้ว (ดูที่ข้อ 13 และพรีวิว)", "ok");
   }),
   "t4-media-kit": (b) => busy(b, async () => {
