@@ -2,7 +2,7 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 import {
   SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
-  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptWorksheetImage, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
+  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptWorksheetImage, promptWorksheetFromText, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
 } from "./template.js";
 
 const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG;
@@ -680,7 +680,7 @@ async function renderPlanEditor() {
       ${sec.assessment.map((a, i) => `<tr><td><input data-p="assessment.${i}.item" value="${esc(a.item)}"></td><td><textarea data-p="assessment.${i}.method" rows="2">${esc(a.method)}</textarea></td><td><textarea data-p="assessment.${i}.tool" rows="2">${esc(a.tool)}</textarea></td><td><textarea data-p="assessment.${i}.criteria" rows="2">${esc(a.criteria)}</textarea></td><td><button class="btn small danger" data-act="t4-as-del" data-i="${i}">✕</button></td></tr>`).join("")}</table></div><button class="btn small" data-act="t4-as-add">+ เพิ่มรายการประเมิน</button></div></details>
     <details class="sec"><summary>13. เอกสารแนบ (ใบงาน / เกณฑ์รูบริก) <span class="muted small">— ต่อท้ายไฟล์ Word</span></summary><div class="body">
       ${(sec.attachments ?? []).map((a, i) => `<div class="card" style="padding:10px"><label>ชื่อเอกสาร<input data-p="attachments.${i}.title" value="${esc(a.title)}"></label><label>เนื้อหา<textarea data-p="attachments.${i}.body" rows="8">${esc(a.body)}</textarea></label>
-        ${a.ws ? wsPanel(a, i) : ""}
+        ${a.ws ? wsPanel(a, i) : `<button type="button" class="btn small accent" data-act="t4-ws-prep" data-i="${i}">📋 เตรียมคำสั่งสร้างรูป + เฉลย จากใบงานนี้</button>`}
         <div class="small muted" style="margin-top:6px">🖼 รูปใบงาน/รูปประกอบ (เช่น รูปที่ ChatGPT สร้าง) — จะแทรกท้ายเนื้อหาเต็มความกว้างหน้ากระดาษ</div>
         <div class="row">${(a.images ?? []).map((m, k) => `<div style="position:relative"><img src="${m.data}" alt="" style="height:90px;border:1px solid var(--line);border-radius:6px"><button type="button" class="btn small danger" data-act="t4-att-imgdel" data-i="${i}" data-k="${k}" style="position:absolute;top:2px;right:2px;padding:0 6px">×</button></div>`).join("")}</div>
         <input type="file" accept="image/*" multiple data-attimg="${i}">
@@ -1181,6 +1181,15 @@ const actions = {
     if (!Array.isArray(ws.questions) || !ws.questions.length) throw new Error("AI ไม่ได้ส่งข้อคำถามมา ลองใหม่อีกครั้ง");
     (p.sections.attachments ??= []).push({ title: String(ws.title || "ใบงาน " + p.title), body: wsToText(ws), ws, theme, sub: `${subjName(c.subject_id)} ป.${c.grade} · หน่วยที่ ${S.unit.seq} ${S.unit.name}`, images: [] });
     await savePlan(); renderPlanEditor(); toast("สร้างใบงานแล้ว — ด้านล่างมีคำสั่งสร้างรูปและเฉลยให้คัดลอก", "ok");
+  }),
+  "t4-ws-prep": (b) => busy(b, async () => {
+    collectPlan(); const a = S.plan.sections.attachments[Number(b.dataset.i)], c = S.course, all = await courseIndicators();
+    if (!String(a.body ?? "").trim()) throw new Error("ช่องเนื้อหาของใบงานนี้ว่างอยู่ ใส่เนื้อหาก่อน");
+    toast("AI กำลังอ่านใบงานและเขียนเฉลย...");
+    const ws = await callAI(promptWorksheetFromText({ subject: subjName(c.subject_id), grade: c.grade, title: a.title, body: a.body, indicators: all.filter((i) => S.plan.indicator_codes.includes(i.code)) }));
+    if (!Array.isArray(ws.questions) || !ws.questions.length) throw new Error("AI อ่านข้อคำถามไม่ได้ ลองใหม่อีกครั้ง");
+    a.ws = ws; a.theme ??= "blue"; a.sub = `${subjName(c.subject_id)} ป.${c.grade} · หน่วยที่ ${S.unit.seq} ${S.unit.name}`;
+    await savePlan(); renderPlanEditor(); toast("พร้อมแล้ว — เลื่อนดูกรอบ \"พร้อมใช้งาน\" ใต้ใบงาน", "ok");
   }),
   "copy-text": async (b) => { const t = document.getElementById(b.dataset.t); if (!t) return; try { await navigator.clipboard.writeText(t.value); } catch { t.select(); document.execCommand?.("copy"); } toast("คัดลอกแล้ว", "ok"); },
   "t4-ws-card": (b) => busy(b, async () => {

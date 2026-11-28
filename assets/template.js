@@ -334,3 +334,17 @@ INSTRUCTIONS: คำชี้แจง: ${ws.instructions ?? ""}
 QUESTIONS:
 ${qs}`;
 }
+
+export function promptWorksheetFromText({ subject, grade, title, body, indicators }) {
+  return `แปลงใบงานที่มีอยู่แล้วเป็นข้อมูลโครงสร้าง พร้อมเขียนเฉลย โดยห้ามเปลี่ยนถ้อยคำของข้อคำถามเดิม
+รายวิชา: ${subject} ชั้นประถมศึกษาปีที่ ${grade}
+ชื่อใบงาน: ${title}
+ตัวชี้วัด:
+${lines(indicators)}
+เนื้อหาใบงาน:
+${String(body).slice(0, 6000)}
+
+ชนิดข้อ: "short" (เขียนตอบ ระบุ lines), "choice" (มีตัวเลือก ใส่ options ไม่ต้องมี ก ข ค นำหน้า), "tf" (ถูก/ผิด), "fill" (เติมคำ ใช้ ______), "draw" (วาดภาพ)
+ตัดบรรทัดชื่อ-ชั้น-เลขที่และบรรทัดจุดไข่ปลาออก เก็บเฉพาะคำชี้แจงและข้อคำถาม
+ตอบเป็น JSON เท่านั้น: {"title":"${title}","instructions":"คำชี้แจง","total_score":จำนวนคะแนนรวม,"questions":[{"type":"short","q":"...","lines":2,"answer":"เฉลย"}]}`;
+}
