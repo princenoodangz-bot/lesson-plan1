@@ -1,7 +1,7 @@
 const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 import {
-  withMaterial, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
+  withMaterial, stripQA, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
   emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptWorksheetImage, promptWorksheetFromText, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
 } from "./template.js";
 
@@ -738,7 +738,7 @@ async function renderPlanEditor() {
   const box = $("#t4edit"); if (!box) return;
   if (!S.plan) { box.innerHTML = '<div class="card muted">เลือกหรือเพิ่มแผนทางซ้าย</div>'; return; }
   const p = S.plan, sec = { ...emptySections(), ...p.sections };
-  p.sections = sec;
+  p.sections = sec; if (cleanQA(sec)) { toast("ลบบรรทัดครูถาม/ตัวอย่างคำตอบที่อยู่นอกขั้นการสอนออกแล้ว (บันทึกเมื่อกดบันทึก)"); }
   const allInds = await courseIndicators();
   const sel = allInds.filter((i) => p.indicator_codes.includes(i.code));
   const AIF = ["objectives.K", "objectives.P", "objectives.A", "content", "key_idea", "media", "process.0", "process.1", "process.2", "process.3", "process.4"];
@@ -1347,7 +1347,7 @@ const actions = {
     const path = b.dataset.path, cur = path.split(".").reduce((o, k) => o?.[k], S.plan.sections) ?? "";
     const all = await courseIndicators(), c = S.course;
     const out = await callAI(promptField({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: S.plan, label: b.dataset.label, current: cur, indicators: all.filter((i) => S.plan.indicator_codes.includes(i.code)) }));
-    setPath(S.plan.sections, path, Array.isArray(out.text) ? out.text.join("\n") : String(out.text ?? ""));
+    { const tx = Array.isArray(out.text) ? out.text.join("\n") : String(out.text ?? ""); setPath(S.plan.sections, path, /^process/.test(path) ? tx : stripQA(tx)); }
     await savePlan(); renderPlanEditor(); toast("AI เขียนหัวข้อใหม่แล้ว", "ok");
   }),
   "t4-as-add": () => { collectPlan(); S.plan.sections.assessment.push({ item: "รายการใหม่", method: "", tool: "", criteria: "" }); renderPlanEditor(); },
@@ -1424,7 +1424,7 @@ const actions = {
     const all = await courseIndicators(), prev = JSON.parse(JSON.stringify(p.sections ?? {}));
     const out = await callAI(promptPlanFill({ school: S.settings?.school_name, subject: subjName(c.subject_id), grade: c.grade, courseCode: c.course_code, unit: S.unit, plan: p, indicators: all.filter((i) => p.indicator_codes.includes(i.code)), current: prev, material: inp.text }), { files: inp.files });
     const fresh = planFromOut(out, prev), merged = JSON.parse(JSON.stringify(prev)); let filled = 0;
-    for (const path of PLAN_FIELDS) { const cur = pGet(merged, path), nv = pGet(fresh, path); if (pEmpty(nv)) continue; if (!onlyEmpty || pEmpty(cur)) { pSet(merged, path, nv); if (pEmpty(cur) || String(cur) !== String(nv)) filled++; } }
+    for (const path of PLAN_FIELDS) { const cur = pGet(merged, path), nv = pGet(fresh, path); if (pEmpty(nv)) continue; if (!onlyEmpty || pEmpty(cur)) { pSet(merged, path, /^process/.test(path) || typeof nv !== "string" ? nv : stripQA(nv)); if (pEmpty(cur) || String(cur) !== String(nv)) filled++; } }
     p.sections = { ...emptySections(), ...merged }; await savePlan(); renderPlanEditor();
     const gaps = PLAN_FIELDS.filter((f) => pEmpty(pGet(p.sections, f))), A = (out.assumptions ?? []).map(String), Q = (out.questions ?? []).map(String);
     openModal(`<h3>ผลวิเคราะห์ข้อมูลจากครู</h3><p class="small">เติม/ปรับ ${filled} ช่อง${onlyEmpty ? " (ไม่ทับที่เขียนไว้แล้ว)" : ""} · ยังว่าง ${gaps.length} ช่อง</p>
@@ -1486,8 +1486,13 @@ function collectPlan() {
   Object.entries(groups).forEach(([path, v]) => setPath(p.sections, path, v));
 }
 
+const QA_PATHS = ["objectives.K", "objectives.P", "objectives.A", "content", "key_idea", "media", "competencies.local", "competencies.key", "sufficiency.moderation", "sufficiency.reason", "sufficiency.immunity", "sufficiency.knowledge", "sufficiency.morality", "resources.inside", "resources.outside", "resources.local"];
+function cleanQA(sec) { let n = 0; const fix = (path) => { const v = pGet(sec, path); if (typeof v === "string" && /ครูถามว่า|ตัวอย่างคำตอบ/.test(v)) { pSet(sec, path, stripQA(v)); n++; } }; QA_PATHS.forEach(fix); (sec.assessment ?? []).forEach((a) => ["method", "tool", "criteria"].forEach((k) => { if (typeof a[k] === "string" && /ครูถามว่า|ตัวอย่างคำตอบ/.test(a[k])) { a[k] = stripQA(a[k]); n++; } })); return n; }
 function planFromOut(out, prev) {
   const base = emptySections(), lines = (v) => Array.isArray(v) ? v.join("\n") : String(v ?? "");
+  const r = planFromOut0(out, prev, base, lines); cleanQA(r); return r;
+}
+function planFromOut0(out, prev, base, lines) {
   return {
     ...base, ...out,
     objectives: { ...base.objectives, ...out.objectives },
