@@ -104,7 +104,7 @@ export async function buildDoc(ctx, plans) {
     out.push(head(9, SECTIONS[8].title));
     PROCESS_STEPS.forEach((st, i) => {
       out.push(para(st, { bold: true, underline: true, keepNext: true }));
-      lines(sec.process?.[i]).forEach((l) => out.push(/^\(?\s*ตัวอย่าง/.test(l.trim()) ? body(l, { left: cm(1.2), italics: true, color: "31849B" }) : body(l, { left: cm(0.6) })));
+      lines(sec.process?.[i]).forEach((l) => out.push(/^[\s\-•–]*\(?\s*ตัวอย่าง/.test(l) ? body(l, { left: cm(1.2), italics: true, color: "D6336C" }) : /^[\s\-•–]*(\d+[.)]\s*)?ครู\s*(ถาม|ตั้งคำถาม|ใช้คำถาม|:)/.test(l) ? body(l, { left: cm(0.9), color: "1F5FBF" }) : body(l, { left: cm(0.6) })));
     });
 
     // 10

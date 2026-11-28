@@ -1489,3 +1489,12 @@ function debounceCheck() {
 }
 
 boot();
+
+// ---------- keep <details> open/closed state across re-renders ----------
+{
+  const st = new Map(), key = (d) => (d.closest(".tab")?.id ?? "") + "|" + (d.dataset.dk ?? d.dataset.dk2 ?? (d.querySelector(":scope>summary")?.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 50));
+  document.addEventListener("toggle", (e) => { const d = e.target; if (d?.tagName === "DETAILS") st.set(key(d), d.open); }, true);
+  const restore = (root) => root.querySelectorAll?.("details").forEach((d) => { const v = st.get(key(d)); if (v !== undefined && d.open !== v) d.open = v; });
+  if (globalThis.MutationObserver) new globalThis.MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType === 1) { if (n.tagName === "DETAILS") { const v = st.get(key(n)); if (v !== undefined) n.open = v; } restore(n); } })))
+    .observe(document.querySelector("main"), { childList: true, subtree: true });
+}
