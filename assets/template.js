@@ -304,3 +304,17 @@ const PFX = "^[\\s\\-•–*·0-9๐-๙.)(]*";
 const ANS_RE = new RegExp(PFX + "(ตัวอย่างคำตอบ|ตัวอย่างการตอบ|ตัวอย่าง|คำตอบของนักเรียน|คำตอบนักเรียน|นักเรียนตอบ|นักเรียนอาจตอบ|คำตอบ)");
 const QST_RE = new RegExp(PFX + "(ครูถาม|ครูตั้งคำถาม|ครูใช้คำถาม|ครู\\s*[:：]|คำถามครู|คำถาม\\s*[:：])");
 export const lineKind = (l) => (ANS_RE.test(l) ? "ans" : QST_RE.test(l) ? "qst" : "");
+
+export function promptWorksheet({ subject, grade, unit, plan, indicators, count, extra }) {
+  return `ออกแบบใบงานนักเรียน 1 ชุด สำหรับแผนการจัดการเรียนรู้
+รายวิชา: ${subject} ชั้นประถมศึกษาปีที่ ${grade}
+หน่วย: ${unit.name}  เรื่อง: ${plan.title}
+ตัวชี้วัด:
+${lines(indicators)}
+สาระสำคัญ: ${plan.sections?.key_idea || "-"}
+เนื้อหา: ${String(plan.sections?.content || "-").slice(0, 1200)}
+ข้อกำหนด: ${count} ข้อ ใช้ภาษาง่ายเหมาะกับนักเรียนชั้น ป.${grade} ตรงกับตัวชี้วัดและเนื้อหาของแผนนี้เท่านั้น ผสมรูปแบบข้อให้หลากหลาย
+ชนิดข้อที่ใช้ได้: "short" (เขียนตอบ ระบุ lines 1-3), "choice" (ตัวเลือก 4 ข้อ ใส่ options), "tf" (ถูก/ผิด), "fill" (เติมคำ ใช้ ______ ในประโยค), "draw" (วาดภาพ/ผังความคิด ใช้ได้ไม่เกิน 1 ข้อ)
+${extra ? "คำสั่งเพิ่มเติมจากครู: " + extra : ""}
+ตอบเป็น JSON เท่านั้น: {"title":"ใบงาน เรื่อง ...","instructions":"คำชี้แจง 1-2 ประโยค","total_score":จำนวนคะแนนรวม,"questions":[{"type":"short","q":"...","lines":2,"answer":"เฉลย"},{"type":"choice","q":"...","options":["...","...","...","..."],"answer":"ข. ..."},{"type":"tf","q":"...","answer":"ถูก"},{"type":"fill","q":"...______...","answer":"..."},{"type":"draw","q":"...","answer":"แนวทางตรวจ"}]}`;
+}
