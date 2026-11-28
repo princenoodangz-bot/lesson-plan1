@@ -163,9 +163,9 @@ export async function buildDoc(ctx, plans) {
     sign("", ctx.director, `ผู้อำนวยการ${sch}`);
     // attachments (worksheets / rubric)
     (sec.attachments ?? []).forEach((a, ai) => {
-      if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim()) return;
+      if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim() && !(a.images ?? []).length) return;
       out.push(para(`เอกสารแนบที่ ${ai + 1}  ${a.title ?? ""}`, { bold: true, align: AlignmentType.CENTER, pageBreakBefore: true, line: 240 }));
-      parseAttachment(a.body).forEach((b) => {
+      ((a.images ?? []).length ? [] : parseAttachment(a.body)).forEach((b) => {
         if (b.t === "dots") return out.push(dl());
         if (b.t === "p") return out.push(para(b.text, { indent: { left: cm(0.6) } }));
         const hdr = new TableRow({ tableHeader: true, children: b.head.map((t, i) => cell([para(t, { bold: true, align: AlignmentType.CENTER })], b.w[i], { fill: "F2F2F2" })) });

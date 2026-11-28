@@ -91,8 +91,8 @@ export function planPreviewHtml(ctx, plan) {
   out.push(`<p class="b ind0">ความเห็นของผู้อำนวยการโรงเรียน</p>`, dl(), dl(), sign("", ctx.director, `ผู้อำนวยการ${ctx.school ?? ""}`));
 
   (sec.attachments ?? []).forEach((a, i) => {
-    if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim()) return;
-    out.push(`<hr><h3 class="c">เอกสารแนบที่ ${i + 1} ${esc(a.title)}</h3>${parseAttachment(a.body).map((b) => b.t === "tbl" ? `<table class="pt"><tr>${b.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>${b.rows.map((r) => `<tr>${r.map((c, k) => `<td${k === 0 && b.head.length === 3 ? ' class="c"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>` : b.t === "dots" ? `<div class="dots"></div>` : P(b.text, "ind0")).join("")}${(a.images ?? []).map((m) => `<img src="${m.data}" alt="" style="width:100%;display:block;margin:8px 0">`).join("")}`);
+    if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim() && !(a.images ?? []).length) return;
+    out.push(`<hr><h3 class="c">เอกสารแนบที่ ${i + 1} ${esc(a.title)}</h3>${(a.images ?? []).length ? "" : parseAttachment(a.body).map((b) => b.t === "tbl" ? `<table class="pt"><tr>${b.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>${b.rows.map((r) => `<tr>${r.map((c, k) => `<td${k === 0 && b.head.length === 3 ? ' class="c"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>` : b.t === "dots" ? `<div class="dots"></div>` : P(b.text, "ind0")).join("")}${(a.images ?? []).map((m) => `<img src="${m.data}" alt="" style="width:100%;display:block;margin:8px 0">`).join("")}`);
   });
   const html = out.join("").replace(/>([^<]*)</g, (m, t) => ">" + th(t) + "<");
   return `<div class="paper">${html}</div>`;

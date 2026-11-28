@@ -681,7 +681,7 @@ async function renderPlanEditor() {
     <details class="sec"><summary>13. เอกสารแนบ (ใบงาน / เกณฑ์รูบริก) <span class="muted small">— ต่อท้ายไฟล์ Word</span></summary><div class="body">
       ${(sec.attachments ?? []).map((a, i) => `<div class="card" style="padding:10px"><label>ชื่อเอกสาร<input data-p="attachments.${i}.title" value="${esc(a.title)}"></label><label>เนื้อหา<textarea data-p="attachments.${i}.body" rows="8">${esc(a.body)}</textarea></label>
         ${a.ws ? wsPanel(a, i) : `<button type="button" class="btn small accent" data-act="t4-ws-prep" data-i="${i}">📋 เตรียมคำสั่งสร้างรูป + เฉลย จากใบงานนี้</button>`}
-        <div class="small muted" style="margin-top:6px">🖼 รูปใบงาน/รูปประกอบ (เช่น รูปที่ ChatGPT สร้าง) — จะแทรกท้ายเนื้อหาเต็มความกว้างหน้ากระดาษ</div>
+        <div class="small muted" style="margin-top:6px">🖼 รูปใบงาน/รูปประกอบ (เช่น รูปที่ ChatGPT สร้าง) — เมื่อแนบรูปแล้ว จะแสดงเฉพาะรูปเต็มความกว้างหน้ากระดาษ ไม่แสดงข้อความเนื้อหาของเอกสารนี้</div>
         <div class="row">${(a.images ?? []).map((m, k) => `<div style="position:relative"><img src="${m.data}" alt="" style="height:90px;border:1px solid var(--line);border-radius:6px"><button type="button" class="btn small danger" data-act="t4-att-imgdel" data-i="${i}" data-k="${k}" style="position:absolute;top:2px;right:2px;padding:0 6px">×</button></div>`).join("")}</div>
         <input type="file" accept="image/*" multiple data-attimg="${i}">
         <button class="btn small danger" data-act="t4-att-del" data-i="${i}">ลบเอกสารนี้</button></div>`).join("") || '<div class="muted">ยังไม่มีเอกสารแนบ</div>'}
