@@ -562,23 +562,29 @@ async function render0() {
     <div class="card"><h3>เล่มของฉัน</h3><div class="list">${list}</div></div><div id="bkedit"></div>`;
   $("#b0s").value = BK.subject; $("#b0c").value = BK.curriculum;
   ["s", "c"].forEach((k) => $("#b0" + k).addEventListener("change", () => { BK.subject = Number($("#b0s").value); BK.curriculum = $("#b0c").value; }));
-  if (BK.book) renderBook();
+  if (BK.book) { BK.stds = await loadStds(BK.book.curriculum_id, BK.book.subject_id); renderBook(); }
 }
+const bkStrandNo = (st) => String(st.strand_no ?? st.standard_code.match(/\d+/)?.[0] ?? "");
+const bkStrands = () => [...new Set((BK.stds ?? []).map(bkStrandNo))].sort((a, b) => Number(a) - Number(b));
+const bkStrandName = (n) => (BK.stds ?? []).find((x) => bkStrandNo(x) === n)?.strand_name ?? "";
 function renderBook() {
   const b = BK.book, d = b.data, ed = $("#bkedit"); if (!ed) return;
   const filled = (v) => (v && String(v).trim() ? "✓" : "○");
   const ta = (path, rows = 6) => `<textarea rows="${rows}" data-bk="${path}">${esc(bkGet(d, path) ?? "")}</textarea>`;
-  const texts = BOOK_TEXTS.map(([k, t]) => `<details class="card"><summary><b>${filled(d.texts?.[k])} ${esc(t)}</b></summary><div class="row" style="margin:8px 0"><button class="btn small" data-act="bk-ai-text" data-k="${k}">AI ร่างส่วนนี้</button></div>${ta("texts." + k, 8)}</details>`).join("");
+  const texts = BOOK_TEXTS.map(([k, t]) => `<details class="card"><summary><b>${filled(d.texts?.[k])}${d.reviewed?.["t_" + k] ? "✔" : ""} ${esc(t)}</b></summary><div class="row" style="margin:8px 0"><button class="btn small primary" data-act="bk-ai-text" data-k="${k}">AI ร่างเฉพาะส่วนนี้</button><label style="flex-direction:row;gap:6px;color:var(--text)"><input type="checkbox" data-bk="reviewed.t_${k}" ${d.reviewed?.["t_" + k] ? "checked" : ""}> ตรวจแล้ว</label></div>${ta("texts." + k, 12)}</details>`).join("");
   const gr = [1, 2, 3, 4, 5, 6].map((g) => { const x = d.grades?.[g] ?? {}; const st = x.structure ?? [];
-    return `<details class="card"><summary><b>${filled(x.desc)}${st.length ? "✓" : "○"} ชั้นประถมศึกษาปีที่ ${g}</b> <span class="muted small">${st.length} แถวโครงสร้าง · ${Object.keys(x.core ?? {}).length} สาระแกนกลาง</span></summary>
+    return `<details class="card"><summary><b>${filled(x.desc)}${st.length ? "✓" : "○"}${Object.keys(x.core ?? {}).length ? "✓" : "○"}${d.reviewed?.["g" + g] ? "✔" : ""} ชั้นประถมศึกษาปีที่ ${g}</b> <span class="muted small">${st.length} แถวโครงสร้าง · ${Object.keys(x.core ?? {}).length} สาระแกนกลาง</span></summary>
       <div class="grid" style="margin:8px 0"><label>รหัสวิชา<input data-bk="grades.${g}.code" value="${esc(x.code ?? "")}"></label><label>ชื่อรายวิชา<input data-bk="grades.${g}.name" value="${esc(x.name ?? "")}"></label><label>ชั่วโมง/ปี<input type="number" data-bk="grades.${g}.hours" value="${x.hours ?? 80}"></label></div>
-      <div class="row" style="margin-bottom:8px"><button class="btn small" data-act="bk-ai-grade" data-g="${g}">AI ร่างชั้นนี้ทั้งหมด</button><button class="btn small" data-act="bk-use-course" data-g="${g}">ใช้โครงสร้างจากรายวิชาที่สร้างไว้</button></div>
-      <label>คำอธิบายรายวิชา</label>${ta(`grades.${g}.desc`, 7)}
-      <label style="margin-top:8px">โครงสร้างรายวิชา</label>
-      ${st.map((r, i) => `<div class="card" style="padding:8px"><div class="grid"><label>ชื่อหน่วย<input data-bk="grades.${g}.structure.${i}.name" value="${esc(r.name ?? "")}"></label><label>ตัวชี้วัด (คั่นด้วย ,)<input data-bkl="grades.${g}.structure.${i}.indicator_codes" value="${esc((r.indicator_codes ?? []).join(", "))}"></label><label>ชั่วโมง<input type="number" data-bk="grades.${g}.structure.${i}.hours" value="${r.hours ?? 0}"></label><label>คะแนน<input type="number" data-bk="grades.${g}.structure.${i}.score_weight" value="${r.score_weight ?? 0}"></label></div><label>เนื้อหา</label><textarea rows="2" data-bk="grades.${g}.structure.${i}.content">${esc(r.content ?? "")}</textarea></div>`).join("") || '<div class="muted small">ยังไม่มี กด "AI ร่างชั้นนี้ทั้งหมด"</div>'}
-      <details style="margin-top:8px"><summary>สาระการเรียนรู้แกนกลางรายตัวชี้วัด</summary>${Object.entries(x.core ?? {}).map(([c, v]) => `<label>${esc(c.replace(/‧/g, "."))}<textarea rows="2" data-bk="grades.${g}.core.${c.replace(/\./g, "‧")}">${esc(v)}</textarea></label>`).join("") || '<div class="muted small">ยังไม่มี</div>'}</details></details>`; }).join("");
-  ed.innerHTML = `<div class="card accent"><h3>${esc(b.title)}</h3><div class="row"><button class="btn primary" data-act="bk-all">AI ร่างทั้งเล่ม (ส่วนที่ยังว่าง)</button><button class="btn accent" data-act="bk-doc">ดาวน์โหลด Word ทั้งเล่ม</button><button class="btn" data-act="bk-next">ไปรายวิชา → แถบ 2</button></div>
-    <div class="muted small" id="bkst" style="margin-top:6px"></div></div>
+      <div class="row" style="margin-bottom:8px"><button class="btn small" data-act="bk-use-course" data-g="${g}">ใช้โครงสร้างจากรายวิชาที่สร้างไว้ (แถบ 2)</button></div>
+      <div class="card" style="padding:10px"><div class="row"><b>① สาระการเรียนรู้แกนกลาง</b><span class="muted small">ทำทีละสาระ</span></div><div class="row" style="margin-top:6px">${bkStrands().map((n) => `<button class="btn small" data-act="bk-ai-core" data-g="${g}" data-n="${n}">AI สาระที่ ${n}</button>`).join("") || '<span class="muted small">ไม่พบสาระ</span>'}</div>
+      <details style="margin-top:8px"><summary>แก้ไขรายตัวชี้วัด (${Object.keys(x.core ?? {}).length})</summary>${Object.entries(x.core ?? {}).map(([c, v]) => `<label>${esc(c.replace(/‧/g, "."))}<textarea rows="2" data-bk="grades.${g}.core.${c}">${esc(v)}</textarea></label>`).join("") || '<div class="muted small">ยังไม่มี</div>'}</details></div>
+      <div class="card" style="padding:10px"><div class="row"><b>② โครงสร้างรายวิชา</b><button class="btn small" data-act="bk-ai-struct" data-g="${g}">AI ร่างหน่วย/ชั่วโมง/คะแนน</button></div>
+      ${st.map((r, i) => `<div class="card" style="padding:8px"><div class="grid"><label>ชื่อหน่วย<input data-bk="grades.${g}.structure.${i}.name" value="${esc(r.name ?? "")}"></label><label>ตัวชี้วัด (คั่นด้วย ,)<input data-bkl="grades.${g}.structure.${i}.indicator_codes" value="${esc((r.indicator_codes ?? []).join(", "))}"></label><label>ชั่วโมง<input type="number" data-bk="grades.${g}.structure.${i}.hours" value="${r.hours ?? 0}"></label><label>คะแนน<input type="number" data-bk="grades.${g}.structure.${i}.score_weight" value="${r.score_weight ?? 0}"></label></div><label>เนื้อหา</label><textarea rows="2" data-bk="grades.${g}.structure.${i}.content">${esc(r.content ?? "")}</textarea></div>`).join("") || '<div class="muted small">ยังไม่มี</div>'}</div>
+      <div class="card" style="padding:10px"><div class="row"><b>③ คำอธิบายรายวิชา</b><button class="btn small" data-act="bk-ai-desc" data-g="${g}">AI ร่างคำอธิบาย</button></div>${ta(`grades.${g}.desc`, 8)}</div>
+      <label style="flex-direction:row;gap:6px;color:var(--text);margin-top:6px"><input type="checkbox" data-bk="reviewed.g${g}" ${d.reviewed?.["g" + g] ? "checked" : ""}> ตรวจชั้นนี้แล้ว</label>
+      </details></details>`; }).join("");
+  ed.innerHTML = `<div class="card accent"><h3>${esc(b.title)}</h3><div class="row"><button class="btn accent" data-act="bk-doc">ดาวน์โหลด Word ทั้งเล่ม</button><button class="btn" data-act="bk-next">ไปรายวิชา → แถบ 2</button></div>
+    <div class="muted small" style="margin-top:6px">กด AI ทีละส่วน ตรวจแล้วติ๊ก "ตรวจแล้ว" ✔ = ตรวจแล้ว ✓ = มีเนื้อหา ○ = ยังว่าง</div><div class="muted small" id="bkst" style="margin-top:6px"></div></div>
     <h3>ส่วนหน้า/ท้ายเล่ม</h3>${texts}<h3>รายชั้น ป.1–6</h3>${gr}`;
 }
 const bkSub = () => subjName(BK.book.subject_id);
@@ -595,25 +601,25 @@ async function bkAiText(k, c) {
   const out = await bkRetry(() => callAI(promptBookText(k, { school: S.settings?.school_name ?? "", subject: bkSub(), curriculum: cn, standards: c.stds, indicators: c.inds })));
   bkSet(b.data, "texts." + k, String(out.text ?? ""));
 }
-async function bkAiGrade(g, c, force = true) {
-  const b = BK.book, d = b.data, gd = (d.grades[g] ??= {}), subj = bkSub();
-  const gi = c.inds.filter((i) => new RegExp(`ป\\.${g}/`).test(i.code));
+const bkGradeInds = (g, c) => c.inds.filter((i) => new RegExp(`ป\\.${g}/`).test(i.code));
+async function bkAiCore(g, n, c) {
+  const b = BK.book, gd = (b.data.grades[g] ??= {}), codes = new Set((c.stds ?? []).filter((x) => bkStrandNo(x) === String(n)).map((x) => x.standard_code));
+  const gi = bkGradeInds(g, c).filter((i) => codes.has(i.standard_code));
+  if (!gi.length) throw new Error(`ไม่มีตัวชี้วัด ป.${g} ในสาระที่ ${n}`);
+  const o = await bkRetry(() => callAI(promptCore({ subject: bkSub(), grade: g, indicators: gi })));
+  gd.core ??= {}; gi.forEach((i) => { const v = o.core?.[i.code]; if (v) gd.core[i.code.replace(/\./g, "‧")] = String(v); });
+}
+async function bkAiStruct(g, c) {
+  const b = BK.book, gd = (b.data.grades[g] ??= {}), gi = bkGradeInds(g, c);
   if (!gi.length) throw new Error(`ไม่มีตัวชี้วัด ป.${g} ในระบบ`);
-  if (force || !Object.keys(gd.core ?? {}).length) {
-    const o = await bkRetry(() => callAI(promptCore({ subject: subj, grade: g, indicators: gi })));
-    gd.core = {}; gi.forEach((i) => { const v = o.core?.[i.code]; if (v) gd.core[i.code.replace(/\./g, "‧")] = String(v); });
-  }
-  if (force || !(gd.structure ?? []).length) {
-    const own = S.courses.find((x) => x.subject_id === b.subject_id && x.curriculum_id === b.curriculum_id && x.grade === g);
-    let rows;
-    if (own) rows = must(await sb.from("course_structure_rows").select("*").eq("course_structure_id", own.id).order("seq"));
-    if (!rows?.length) { const o = await bkRetry(() => callAI(promptStructure({ subject: subj, grade: g, curriculum: b.curriculum_id, totalHours: Number(gd.hours) || 80, semesters: 2, indicators: gi }))); const valid = new Set(gi.map((i) => i.code)); rows = (o.rows ?? []).map((r) => ({ kind: r.kind === "exam" ? "exam" : "unit", semester: num(r.semester) || 1, name: String(r.name ?? ""), indicator_codes: (r.indicator_codes ?? []).filter((x) => valid.has(x)), hours: Math.round(num(r.hours)), score_weight: num(r.score_weight) })); }
-    gd.structure = rows.map((r) => ({ kind: r.kind, name: r.name, indicator_codes: r.indicator_codes ?? [], hours: r.hours, score_weight: r.score_weight, content: r.kind === "exam" ? "" : (r.indicator_codes ?? []).map((cd) => gd.core?.[cd.replace(/\./g, "‧")]).filter(Boolean).join(", ") }));
-  }
-  if (force || !gd.desc) {
-    const o = await bkRetry(() => callAI(promptGradeDesc({ subject: subj, grade: g, name: gd.name || subj, hours: gd.hours || 80, indicators: gi, units: (gd.structure ?? []).filter((r) => r.kind !== "exam").map((r) => r.name) })));
-    gd.desc = String(o.text ?? "");
-  }
+  const o = await bkRetry(() => callAI(promptStructure({ subject: bkSub(), grade: g, curriculum: b.curriculum_id, totalHours: Number(gd.hours) || 80, semesters: 2, indicators: gi })));
+  const valid = new Set(gi.map((i) => i.code));
+  gd.structure = (o.rows ?? []).map((r) => { const codes = r.kind === "exam" ? [] : (r.indicator_codes ?? []).filter((x) => valid.has(x)); return { kind: r.kind === "exam" ? "exam" : "unit", name: String(r.name ?? ""), indicator_codes: codes, hours: Math.round(num(r.hours)), score_weight: num(r.score_weight), content: codes.map((cd) => gd.core?.[cd.replace(/\./g, "‧")]).filter(Boolean).join(", ") }; });
+}
+async function bkAiDesc(g, c) {
+  const b = BK.book, gd = (b.data.grades[g] ??= {}), gi = bkGradeInds(g, c);
+  const o = await bkRetry(() => callAI(promptGradeDesc({ subject: bkSub(), grade: g, name: gd.name || bkSub(), hours: gd.hours || 80, indicators: gi, units: (gd.structure ?? []).filter((r) => r.kind !== "exam").map((r) => r.name) })));
+  gd.desc = String(o.text ?? "");
 }
 async function bkRun(tasks) {
   BK.busy = true; const errs = []; let n = 0;
@@ -628,7 +634,7 @@ async function bkDoc() {
 }
 document.addEventListener("change", (e) => {
   const t = e.target; if (!BK.book) return;
-  if (t.dataset?.bk) { let v = t.value; if (t.type === "number") v = num(v); bkSet(BK.book.data, t.dataset.bk, v); bkSave(); }
+  if (t.dataset?.bk) { let v = t.type === "checkbox" ? t.checked : t.value; if (t.type === "number") v = num(v); bkSet(BK.book.data, t.dataset.bk, v); bkSave(); }
   if (t.dataset?.bkl) { bkSet(BK.book.data, t.dataset.bkl, t.value.split(",").map((x) => x.trim()).filter(Boolean)); bkSave(); }
 });
 
@@ -1098,7 +1104,9 @@ Object.assign(actions, {
   "bk-open": (b) => { BK.book = BK.books.find((x) => x.id === b.dataset.id); render0(); },
   "bk-del": async (b) => { if (!confirm("ลบเล่มนี้?")) return; must(await sb.from("curriculum_books").delete().eq("id", b.dataset.id)); if (BK.book?.id === b.dataset.id) BK.book = null; await bkLoad(); render0(); },
   "bk-ai-text": (b) => busy(b, async () => { const c = await bkCtx(); await bkAiText(b.dataset.k, c); bkSave(); renderBook(); }),
-  "bk-ai-grade": (b) => busy(b, async () => { const c = await bkCtx(); await bkRun([[`ชั้น ป.${b.dataset.g}`, () => bkAiGrade(Number(b.dataset.g), c, true)]]); }),
+  "bk-ai-core": (b) => busy(b, async () => { const c = await bkCtx(); await bkRun([[`ป.${b.dataset.g} สาระที่ ${b.dataset.n}`, () => bkAiCore(Number(b.dataset.g), b.dataset.n, c)]]); }),
+  "bk-ai-struct": (b) => busy(b, async () => { const c = await bkCtx(); await bkRun([[`โครงสร้างรายวิชา ป.${b.dataset.g}`, () => bkAiStruct(Number(b.dataset.g), c)]]); }),
+  "bk-ai-desc": (b) => busy(b, async () => { const c = await bkCtx(); await bkRun([[`คำอธิบายรายวิชา ป.${b.dataset.g}`, () => bkAiDesc(Number(b.dataset.g), c)]]); }),
   "bk-use-course": (b) => busy(b, async () => {
     const g = Number(b.dataset.g), bk = BK.book, own = S.courses.find((x) => x.subject_id === bk.subject_id && x.curriculum_id === bk.curriculum_id && x.grade === g);
     if (!own) throw new Error(`ยังไม่มีรายวิชา ป.${g} ในแถบ 2`);
@@ -1106,13 +1114,6 @@ Object.assign(actions, {
     const gd = (bk.data.grades[g] ??= {}); gd.hours = own.total_hours; if (own.course_code) gd.code = own.course_code; gd.name = own.course_name;
     gd.structure = rows.map((r) => ({ kind: r.kind, name: r.name, indicator_codes: r.indicator_codes ?? [], hours: r.hours, score_weight: r.score_weight, content: r.kind === "exam" ? "" : (r.indicator_codes ?? []).map((cd) => gd.core?.[cd.replace(/\./g, "‧")]).filter(Boolean).join(", ") }));
     bkSave(); renderBook();
-  }),
-  "bk-all": (b) => busy(b, async () => {
-    const c = await bkCtx(), d = BK.book.data, tasks = [];
-    BOOK_TEXTS.forEach(([k, t]) => { if (!String(d.texts?.[k] ?? "").trim()) tasks.push([t, () => bkAiText(k, c)]); });
-    for (let g = 1; g <= 6; g++) { const x = d.grades[g] ?? {}; if (!Object.keys(x.core ?? {}).length || !(x.structure ?? []).length || !x.desc) tasks.push([`ชั้น ป.${g}`, () => bkAiGrade(g, c, false)]); }
-    if (!tasks.length) return toast("ทุกส่วนมีเนื้อหาแล้ว", "ok");
-    await bkRun(tasks);
   }),
   "bk-doc": (b) => busy(b, bkDoc),
   "bk-next": () => go("t2"),
