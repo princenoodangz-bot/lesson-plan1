@@ -1,5 +1,5 @@
 // Paper-style preview of one lesson plan, laid out like the school's original template (12 sections).
-import { parseAttachment, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
+import { lineKind, parseAttachment, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const lines = (v) => (Array.isArray(v) ? v : String(v ?? "").split(/\r?\n/)).map((l) => String(l).trim()).filter(Boolean);
@@ -13,7 +13,6 @@ export function planPreviewHtml(ctx, plan) {
   const stdCodes = [...new Set(inds.map((i) => i.standard_code))];
   const stdOf = (sc) => ctx.standards.find((s) => s.standard_code === sc);
   const H = (n, t) => `<h4>${n}. ${esc(t)}</h4>`;
-  const ANS = /^[\s\-•–]*\(?\s*(ตัวอย่าง|นักเรียน\s*ตอบ|คำตอบ)/, QST = /^[\s\-•–]*(\d+[.)]\s*)?ครู\s*(ถาม|ตั้งคำถาม|ใช้คำถาม|:)/;
   const P = (t, cls = "") => `<p class="${cls}">${nl(t)}</p>`;
   const L = (txt, fmt) => lines(txt).map((l, i) => P(fmt ? fmt(l, i) : l, "ind2")).join("");
   const out = [];
@@ -55,7 +54,7 @@ export function planPreviewHtml(ctx, plan) {
   out.push(`<p class="b ind1">8Cs คือ</p>`); C8.forEach((t) => out.push(P(`${(sec.focus?.c8 ?? []).includes(t) ? "☑" : "☐"} ${t}`, "ind2")));
 
   out.push(H(9, SECTIONS[8].title));
-  PROCESS_STEPS.forEach((st, i) => { out.push(`<p class="b"><u>${esc(st)}</u></p>`); out.push(lines(sec.process?.[i]).map((l) => P(l, ANS.test(l) ? "ind2 ans" : QST.test(l) ? "ind1 qst" : "ind0")).join("") || `<p class="ph ind0">(ว่าง)</p>`); });
+  PROCESS_STEPS.forEach((st, i) => { out.push(`<p class="b"><u>${esc(st)}</u></p>`); out.push(lines(sec.process?.[i]).map((l) => P(l, ({ ans: "ind2 ans", qst: "ind1 qst" })[lineKind(l)] ?? "ind0")).join("") || `<p class="ph ind0">(ว่าง)</p>`); });
 
   out.push(H(10, SECTIONS[9].title)); out.push(L(sec.media, (l, i) => `${i + 1}. ${stripNum(l)}`) || `<p class="ph ind1">(ว่าง)</p>`);
 

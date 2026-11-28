@@ -298,3 +298,9 @@ export function parseAttachment(body) {
   }
   return out;
 }
+
+// classify a teaching-step line: "ans" (student answer, pink) / "qst" (teacher asks, blue) / ""
+const PFX = "^[\\s\\-•–*·0-9๐-๙.)(]*";
+const ANS_RE = new RegExp(PFX + "(ตัวอย่างคำตอบ|ตัวอย่างการตอบ|ตัวอย่าง|คำตอบของนักเรียน|คำตอบนักเรียน|นักเรียนตอบ|นักเรียนอาจตอบ|คำตอบ)");
+const QST_RE = new RegExp(PFX + "(ครูถาม|ครูตั้งคำถาม|ครูใช้คำถาม|ครู\\s*[:：]|คำถามครู|คำถาม\\s*[:：])");
+export const lineKind = (l) => (ANS_RE.test(l) ? "ans" : QST_RE.test(l) ? "qst" : "");

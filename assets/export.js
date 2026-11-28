@@ -1,6 +1,6 @@
 // Word (.docx) export that follows the school's original plan layout:
 // A4, margins L3.17 R1.75 T2.30 B1.50 cm, TH SarabunIT๙ 16.5/16 pt, 12 numbered sections, 4-column assessment table.
-import { parseAttachment, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
+import { lineKind, parseAttachment, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
 
 const DOCX_CDN = "https://cdn.jsdelivr.net/npm/docx@9.16.1/+esm";
 const FONT = "TH SarabunIT๙";
@@ -104,7 +104,7 @@ export async function buildDoc(ctx, plans) {
     out.push(head(9, SECTIONS[8].title));
     PROCESS_STEPS.forEach((st, i) => {
       out.push(para(st, { bold: true, underline: true, keepNext: true }));
-      lines(sec.process?.[i]).forEach((l) => out.push(/^[\s\-•–]*\(?\s*(ตัวอย่าง|นักเรียน\s*ตอบ|คำตอบ)/.test(l) ? body(l, { left: cm(1.2), italics: true, color: "D6336C" }) : /^[\s\-•–]*(\d+[.)]\s*)?ครู\s*(ถาม|ตั้งคำถาม|ใช้คำถาม|:)/.test(l) ? body(l, { left: cm(0.9), color: "1F5FBF" }) : body(l, { left: cm(0.6) })));
+      lines(sec.process?.[i]).forEach((l) => out.push(lineKind(l) === "ans" ? body(l, { left: cm(1.2), italics: true, color: "D6336C" }) : lineKind(l) === "qst" ? body(l, { left: cm(0.9), color: "1F5FBF" }) : body(l, { left: cm(0.6) })));
     });
 
     // 10
