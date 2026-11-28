@@ -205,8 +205,10 @@ async function fetchOfficial(subject, grade, curriculum) {
     throw new Error(`${out.error || "ดึงไม่สำเร็จ"}${a ? " — " + a : ""}`);
   }
   refreshQuota(); const text = out.text;
-  if (/NOTFOUND/.test(text) && !/ป\.?\s*\d\s*\/\s*\d/.test(text)) return null;
-  const r = parseCurriculumText(text, grade);
+  T1.fetchRaw = String(text).slice(0, 1500);
+  const clean = String(text).replace(/[*#`>|]/g, "").replace(/^\s*[-•·]\s*/gm, "").replace(/^\s*\d+[.)]\s+(?=ป)/gm, "");
+  if (/NOTFOUND/.test(clean) && !/ป\.?\s*\d\s*\/\s*\d/.test(clean)) return null;
+  const r = parseCurriculumText(clean, grade);
   return r.indicators.length ? { ...r, expect: src?.expect?.[grade - 1] ?? null } : null;
 }
 let IMP = null;
@@ -439,7 +441,7 @@ function renderT1Prev() {
   const box = $("#t1prev"); if (!box || !T1.ind) return;
   if (!T1.ind.length) {
     box.innerHTML = `<div class="card"><b>ยังไม่มีข้อมูลตัวชี้วัดของ ${esc(subjName(T1.subject))} ป.${T1.grade} (${esc(T1.curriculum)}) ในระบบ</b>
-      <p class="muted">${T1.fetchErr ? `<span style="color:var(--red)">ดึงอัตโนมัติไม่สำเร็จ: ${esc(T1.fetchErr)}</span><br>` : ""}ต้องนำเข้าก่อนจึงจะสร้างโครงสร้างได้ ใช้ช่อง “นำเข้าตัวชี้วัดเอง” ด้านล่าง (วางข้อความจากเอกสารหลักสูตร) ตอนนี้มีข้อมูลสำเร็จรูปเฉพาะสุขศึกษาและพลศึกษา ป.1-6 หลักสูตร 2551 ปรับปรุง 2560</p></div>`;
+      <p class="muted">${T1.fetchErr ? `<span style="color:var(--red)">ดึงอัตโนมัติไม่สำเร็จ: ${esc(T1.fetchErr)}</span><br>${T1.fetchRaw ? `<details><summary class="small">คำตอบดิบของ AI</summary><pre class="small" style="white-space:pre-wrap">${esc(T1.fetchRaw)}</pre></details>` : ""}<button class="btn small" data-act="t1-load">ลองดึงใหม่</button><br>` : ""}ต้องนำเข้าก่อนจึงจะสร้างโครงสร้างได้ ใช้ช่อง “นำเข้าตัวชี้วัดเอง” ด้านล่าง (วางข้อความจากเอกสารหลักสูตร) ตอนนี้มีข้อมูลสำเร็จรูปเฉพาะสุขศึกษาและพลศึกษา ป.1-6 หลักสูตร 2551 ปรับปรุง 2560</p></div>`;
     return;
   }
   const by = {}; T1.ind.forEach((i) => (by[i.standard_code] ??= []).push(i));
@@ -1040,14 +1042,14 @@ const actions = {
     const key = `${T1.curriculum}|${T1.subject}|${T1.grade}`;
     T1.ind = await loadInds(T1.curriculum, T1.subject, T1.grade);
     T1.std = Object.fromEntries((await loadStds(T1.curriculum, T1.subject)).map((x) => [x.standard_code, x]));
-    T1.fetched = null; T1.fetchErr = null;
+    T1.fetched = null; T1.fetchErr = null; T1.fetchRaw = null;
     if (!T1.ind.length) {
       toast("ยังไม่มีในระบบ กำลังไปดึงจากเอกสารหลักสูตร (ครั้งแรกใช้เวลาสักครู่)");
       try {
         const r = await fetchOfficial(T1.subject, T1.grade, T1.curriculum);
         if (key !== `${T1.curriculum}|${T1.subject}|${T1.grade}`) return;
         if (r) { T1.fetched = r; T1.ind = r.indicators; T1.std = Object.fromEntries(r.standards.map((x) => [x.standard_code, x])); }
-        else T1.fetchErr = "ไม่พบเอกสารต้นทางของวิชา/หลักสูตรนี้";
+        else T1.fetchErr = "AI ตอบกลับมาแต่แปลงเป็นตัวชี้วัดไม่ได้ (ดูคำตอบดิบด้านล่าง)";
       } catch (e) { T1.fetchErr = e.message; }
     }
     renderT1Prev();
