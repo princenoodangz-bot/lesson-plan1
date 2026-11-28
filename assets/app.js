@@ -2,7 +2,7 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 import {
   SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
-  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
+  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
 } from "./template.js";
 
 const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG;
@@ -566,6 +566,16 @@ const t9Msg = (m) => { const e = $("#t9st"); if (e) e.textContent = m; };
 const t9Save = async (doc, name) => (await import("./export.js")).saveBlob(await (await import("./curdoc.js")).docBlob(doc), safeName(name) + ".docx");
 // ---------- tab 0: school curriculum book ----------
 const DEF_HOURS = { 1: [200, 200, 200, 160, 160, 160], 2: [200, 200, 200, 160, 160, 160], 3: [120, 120, 120, 120, 120, 120], 4: [120, 120, 120, 120, 120, 120], 5: [80, 80, 80, 80, 80, 80], 6: [80, 80, 80, 80, 80, 80], 7: [40, 40, 40, 40, 40, 40], 8: [40, 40, 40, 80, 80, 80] };
+const DEF_TT = () => [
+  { group: true, name: "รายวิชาพื้นฐาน" },
+  { name: "ภาษาไทย", h: [200, 200, 200, 160, 160, 160] }, { name: "คณิตศาสตร์", h: [200, 200, 200, 160, 160, 160] },
+  { name: "วิทยาศาสตร์และเทคโนโลยี", h: [120, 120, 120, 120, 120, 120] }, { name: "สังคมศึกษา ศาสนา และวัฒนธรรม", h: [80, 80, 80, 80, 80, 80] },
+  { name: "ประวัติศาสตร์", indent: true, h: [40, 40, 40, 40, 40, 40] }, { name: "สุขศึกษาและพลศึกษา", h: [80, 80, 80, 80, 80, 80] },
+  { name: "ศิลปะ", h: [80, 80, 80, 80, 80, 80] }, { name: "การงานอาชีพ", h: [40, 40, 40, 40, 40, 40] }, { name: "ภาษาต่างประเทศ", h: [40, 40, 40, 80, 80, 80] },
+  { group: true, name: "กิจกรรมพัฒนาผู้เรียน" },
+  { name: "กิจกรรมแนะแนว", indent: true, h: [40, 40, 40, 40, 40, 40] }, { name: "ลูกเสือ เนตรนารี / ยุวกาชาด", indent: true, h: [40, 40, 40, 40, 40, 40] },
+  { name: "ชุมนุม", indent: true, h: [30, 30, 30, 30, 30, 30] }, { name: "กิจกรรมเพื่อสังคมและสาธารณประโยชน์", indent: true, h: [10, 10, 10, 10, 10, 10] },
+];
 const BK = { open: new Set(), subject: 5, curriculum: "2551r60", book: null, books: null, busy: false };
 const bkGet = (o, path) => path.split(".").reduce((a, k) => a?.[k], o);
 const bkSet = (o, path, v) => { const ks = path.split("."); const last = ks.pop(); const t = ks.reduce((a, k) => (a[k] ??= {}), o); t[last] = v; };
@@ -605,10 +615,17 @@ function renderBook() {
       <div class="card" style="padding:10px"><div class="row"><b>③ คำอธิบายรายวิชา</b><button class="btn small" data-act="bk-ai-desc" data-g="${g}">AI ร่างคำอธิบาย</button></div>${ta(`grades.${g}.desc`, 8)}</div>
       <label style="flex-direction:row;gap:6px;color:var(--text);margin-top:6px"><input type="checkbox" data-bk="reviewed.g${g}" ${d.reviewed?.["g" + g] ? "checked" : ""}> ตรวจชั้นนี้แล้ว</label>
       </details></details>`; }).join("");
+  if (!d.time_table) d.time_table = DEF_TT(); d.extra ??= [];
+  const ttHtml = d.time_table.map((r, i) => `<div class="row" style="gap:4px;margin:3px 0"><input style="flex:2;min-width:160px${r.group ? ";font-weight:bold" : ""}" data-bk="time_table.${i}.name" value="${esc(r.name)}">${r.group ? '<span class="muted small" style="flex:3">หัวข้อกลุ่ม</span>' : [0, 1, 2, 3, 4, 5].map((k) => `<input type="number" style="width:62px" title="ป.${k + 1}" data-bk="time_table.${i}.h.${k}" value="${r.h?.[k] ?? 0}">`).join("")}<button class="btn small danger" data-act="bk-tt-del" data-i="${i}">ลบ</button></div>`).join("");
+  const exHtml = d.extra.map((x, i) => `<div class="card" style="padding:8px"><div class="grid"><label>ชั้น ป.<input type="number" min="1" max="6" data-bk="extra.${i}.grade" value="${x.grade ?? 1}"></label><label>รหัสวิชา<input data-bk="extra.${i}.code" value="${esc(x.code ?? "")}"></label><label>ชื่อรายวิชา<input data-bk="extra.${i}.name" value="${esc(x.name ?? "")}"></label><label>ชั่วโมง/ปี<input type="number" data-bk="extra.${i}.hours" value="${x.hours ?? 40}"></label></div>
+    <label>ขอบข่ายที่ต้องการ (ให้ AI ใช้)<input data-bk="extra.${i}.note" value="${esc(x.note ?? "")}" placeholder="เช่น ว่ายน้ำเพื่อความปลอดภัย"></label>
+    <div class="row" style="margin:6px 0"><button class="btn small" data-act="bk-ai-extra" data-i="${i}">AI ร่างคำอธิบาย</button><button class="btn small danger" data-act="bk-ex-del" data-i="${i}">ลบรายวิชา</button></div>${ta(`extra.${i}.desc`, 6)}</div>`).join("");
   const noData = !(BK.stds ?? []).length;
   ed.innerHTML = `${noData ? `<div class="card" style="border:2px solid var(--red)"><b>⚠ ยังไม่มีมาตรฐาน/ตัวชี้วัดของวิชานี้ในระบบ</b><p class="small">AI จะเขียนโดยไม่มีข้อมูลจริงอ้างอิง ไปแถบ 1 → "นำเข้าตัวชี้วัดเอง" วางมาตรฐานและตัวชี้วัด ป.1–6 จากเอกสารหลักสูตรก่อน แล้วกลับมากด AI ใหม่</p><button class="btn small" data-act="goto" data-tab="t1">ไปแถบ 1</button></div>` : ""}<div class="card accent"><h3>${esc(b.title)}</h3><div class="row"><button class="btn accent" data-act="bk-doc">ดาวน์โหลด Word ทั้งเล่ม</button><button class="btn" data-act="bk-next">ไปรายวิชา → แถบ 2</button></div>
     <div class="muted small" style="margin-top:6px">กด AI ทีละส่วน ตรวจแล้วติ๊ก "ตรวจแล้ว" ✔ = ตรวจแล้ว ✓ = มีเนื้อหา ○ = ยังว่าง</div><div class="muted small" id="bkst" style="margin-top:6px"></div></div>
-    <h3>ส่วนหน้า/ท้ายเล่ม</h3>${texts}<h3>รายชั้น ป.1–6</h3>${gr}`;
+    <h3>ส่วนหน้า/ท้ายเล่ม</h3>${texts}<h3>รายชั้น ป.1–6</h3>${gr}
+    <details class="card" data-dk="extra"><summary><b>${d.extra.length ? "✓" : "○"} รายวิชาเพิ่มเติม (${d.extra.length})</b></summary><p class="muted small">ใช้ "ผลการเรียนรู้" แทนตัวชี้วัด</p>${exHtml}<button class="btn small" data-act="bk-ex-add">+ เพิ่มรายวิชาเพิ่มเติม</button></details>
+    <details class="card" data-dk="tt"><summary><b>✓ โครงสร้างเวลาเรียนทั้งโรงเรียน</b></summary><p class="muted small">ค่าเริ่มต้นเป็นตัวอย่าง ตรวจและแก้ให้ตรงกับโรงเรียน (ช่องตัวเลข = ป.1 ถึง ป.6) แถววิชานี้จะใช้ชั่วโมงจากรายชั้นอัตโนมัติ รายวิชาเพิ่มเติมจะเพิ่มเข้าตารางเอง</p>${ttHtml}<div class="row" style="margin-top:6px"><button class="btn small" data-act="bk-tt-add">+ เพิ่มแถว</button><button class="btn small" data-act="bk-tt-reset">คืนค่าเริ่มต้น</button></div></details>`;
   $$("#bkedit details[data-dk]").forEach((x) => { if (BK.open.has(x.dataset.dk)) x.open = true; });
   window.scrollTo?.(0, sy);
 }
@@ -653,10 +670,16 @@ async function bkRun(tasks) {
   for (const [label, fn] of tasks) { bkMsg(`(${++n}/${tasks.length}) ${label}...`); try { await fn(); must(await sb.from("curriculum_books").update({ data: BK.book.data, updated_at: new Date().toISOString() }).eq("id", BK.book.id)); } catch (e) { errs.push(`${label}: ${e.message}`); } }
   BK.busy = false; renderBook(); bkMsg(errs.length ? `เสร็จ แต่มี ${errs.length} ส่วนไม่สำเร็จ (กดอีกครั้งเพื่อทำส่วนที่ว่างต่อ): ${errs.join(" | ")}` : "เสร็จแล้ว ตรวจเนื้อหาแล้วโหลด Word ได้");
 }
+function bkTimeTable(d, grades) {
+  const sub = bkSub(), rows = (d.time_table ?? DEF_TT()).map((r) => (r.name === sub ? { ...r, h: [1, 2, 3, 4, 5, 6].map((g) => grades[g]?.hours ?? r.h?.[g - 1]) } : r));
+  const ex = (d.extra ?? []).filter((x) => x.name);
+  if (ex.length) { rows.push({ group: true, name: "รายวิชาเพิ่มเติม" }); ex.forEach((x) => rows.push({ name: x.name, indent: true, h: [1, 2, 3, 4, 5, 6].map((g) => (Number(x.grade) === g ? Number(x.hours) || 0 : 0)) })); }
+  return rows;
+}
 async function bkDoc() {
   const b = BK.book, d = b.data, c = await bkCtx(), m = await import("./bookdoc.js");
   const grades = {}; for (let g = 1; g <= 6; g++) { const x = d.grades?.[g] ?? {}; const fix = (o) => Object.fromEntries(Object.entries(o ?? {}).map(([k, v]) => [k.replace(/‧/g, "."), v])); grades[g] = { ...x, core: fix(x.core), local: fix(x.local) }; }
-  const blob = await m.bookBlob({ thNum, school: S.settings?.school_name ?? "", year: S.settings?.academic_year ?? "", subject: bkSub(), curriculumName: S.curricula.find((x) => x.id === b.curriculum_id)?.name ?? b.curriculum_id, texts: d.texts ?? {}, grades, standards: c.stds, indicators: c.inds });
+  const blob = await m.bookBlob({ thNum, school: S.settings?.school_name ?? "", year: S.settings?.academic_year ?? "", subject: bkSub(), curriculumName: S.curricula.find((x) => x.id === b.curriculum_id)?.name ?? b.curriculum_id, texts: d.texts ?? {}, grades, standards: c.stds, indicators: c.inds, extra: d.extra ?? [], timeTable: bkTimeTable(d, grades) });
   (await import("./export.js")).saveBlob(blob, safeName(`เล่มหลักสูตร_${bkSub()}`) + ".docx");
 }
 document.addEventListener("change", async (e) => {
@@ -1148,6 +1171,12 @@ Object.assign(actions, {
     bkSave(); renderBook();
   }),
   "bk-doc": (b) => busy(b, bkDoc),
+  "bk-tt-add": () => { BK.book.data.time_table.push({ name: "แถวใหม่", h: [0, 0, 0, 0, 0, 0] }); bkSave(); renderBook(); },
+  "bk-tt-del": (b) => { BK.book.data.time_table.splice(Number(b.dataset.i), 1); bkSave(); renderBook(); },
+  "bk-tt-reset": () => { if (!confirm("คืนค่าตารางเวลาเรียนเป็นค่าเริ่มต้น?")) return; BK.book.data.time_table = DEF_TT(); bkSave(); renderBook(); },
+  "bk-ex-add": () => { const ab = (BK.stds?.[0]?.standard_code ?? "").split(" ")[0]; BK.book.data.extra.push({ grade: 1, code: `${ab}1120${BK.book.data.extra.length + 1}`, name: "", hours: 40, note: "", desc: "" }); bkSave(); renderBook(); },
+  "bk-ex-del": (b) => { if (!confirm("ลบรายวิชาเพิ่มเติมนี้?")) return; BK.book.data.extra.splice(Number(b.dataset.i), 1); bkSave(); renderBook(); },
+  "bk-ai-extra": (b) => busy(b, async () => { const x = BK.book.data.extra[Number(b.dataset.i)]; if (!x.name) throw new Error("ใส่ชื่อรายวิชาก่อน"); await bkRun([[`รายวิชาเพิ่มเติม ${x.name}`, async () => { const o = await bkRetry(() => callAI(promptExtraDesc({ subject: bkSub(), grade: x.grade, name: x.name, hours: x.hours, note: x.note }))); x.desc = String(o.text ?? ""); }]]); }),
   "bk-next": () => go("t2"),
 });
 // global listeners

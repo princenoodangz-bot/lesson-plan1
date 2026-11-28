@@ -8,11 +8,11 @@ const byCode = (a, b) => a.code.localeCompare(b.code, "th", { numeric: true });
 
 export async function buildBookDoc(b) {
   const D = await getDocx();
-  const { Document, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, TableLayoutType, LineRuleType, VerticalAlign, Footer, Header, PageNumber } = D;
+  const { Document, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, TableLayoutType, LineRuleType, VerticalAlign, Footer, Header, PageNumber, HeadingLevel, TableOfContents } = D;
   const th = b.thNum, C = AlignmentType.CENTER;
   const run = (t, o = {}) => new TextRun({ text: th(t), font: FONT, size: o.size ?? 32, bold: o.bold, italics: o.italics });
-  const p = (t, o = {}) => new Paragraph({ children: [run(t, o)], alignment: o.align ?? AlignmentType.LEFT, indent: o.indent, pageBreakBefore: o.pb, keepNext: o.keepNext, spacing: { line: 260, lineRule: LineRuleType.AUTO, before: o.before ?? 0, after: o.after ?? 60 } });
-  const h1 = (t, pb = true) => p(t, { bold: true, size: 40, align: C, pb, after: 160 });
+  const p = (t, o = {}) => new Paragraph({ children: [run(t, o)], alignment: o.align ?? AlignmentType.LEFT, indent: o.indent, pageBreakBefore: o.pb, keepNext: o.keepNext, heading: o.heading, spacing: { line: 260, lineRule: LineRuleType.AUTO, before: o.before ?? 0, after: o.after ?? 60 } });
+  const h1 = (t, pb = true, toc = true) => p(t, { bold: true, size: 40, align: C, pb, after: 160, heading: toc ? HeadingLevel.HEADING_1 : undefined });
   const h2 = (t) => p(t, { bold: true, size: 34, before: 160, keepNext: true });
   const h3 = (t) => p(t, { bold: true, before: 100, keepNext: true });
   const body = (t) => String(t ?? "").split(/\r?\n/).filter((x) => x.trim()).map((l) => p(l.trim(), { indent: { firstLine: cm(1.2) }, align: AlignmentType.THAI_DISTRIBUTE }));
@@ -43,10 +43,13 @@ export async function buildBookDoc(b) {
 
   // คำนำ + สารบัญ
   kids.push(h1("คำนำ")); kids.push(...body(T.foreword)); kids.push(p("คณะผู้จัดทำ", { align: AlignmentType.RIGHT, before: 300 }));
-  const toc = ["คำนำ", "สารบัญ", "ความนำ", `เรียนรู้อะไรใน${b.subject}`, "สาระและมาตรฐานการเรียนรู้", "คุณภาพผู้เรียน", "ตัวชี้วัดระหว่างทางและปลายทาง", "ตัวชี้วัดและสาระการเรียนรู้แกนกลาง", ...grades.map((g) => `ชั้นประถมศึกษาปีที่ ${g}: คำอธิบายรายวิชาและโครงสร้างรายวิชา`), "โครงสร้างเวลาเรียน", "เกณฑ์การวัดและการประเมินผล", "อภิธานศัพท์"];
-  kids.push(h1("สารบัญ"), p("เรื่อง", { bold: true }), ...toc.map((t) => p(t)));
+  kids.push(h1("สารบัญ", true, false), p("(ถ้าเลขหน้ายังไม่ขึ้น ใน Word ให้แตะที่สารบัญแล้วเลือก อัปเดตเขตข้อมูล/Update Table)", { size: 26, italics: true, align: C }),
+    new TableOfContents("สารบัญ", { hyperlink: true, headingStyleRange: "1-1" }));
 
   kids.push(h1("ความนำ")); kids.push(...body(T.intro));
+  if (T.vision) { kids.push(h1("วิสัยทัศน์ พันธกิจ เป้าหมาย")); kids.push(...body(T.vision)); }
+  if (T.competencies) { kids.push(h1("สมรรถนะสำคัญของผู้เรียน")); kids.push(...body(T.competencies)); }
+  if (T.traits) { kids.push(h1("คุณลักษณะอันพึงประสงค์")); kids.push(...body(T.traits)); }
   kids.push(h1(`เรียนรู้อะไรใน${b.subject}`)); kids.push(...body(T.learn_what));
 
   // สาระและมาตรฐาน
@@ -100,13 +103,25 @@ export async function buildBookDoc(b) {
     kids.push(table([4, 4.2, 5.2, 1.6, 1.6], ["ชื่อหน่วยการเรียนรู้", "มาตรฐาน/ตัวชี้วัด", "เนื้อหา", "จำนวน (ชั่วโมง)", "น้ำหนักคะแนน"], rows, { center: [3, 4] }));
   });
 
+  const extra = (b.extra ?? []).filter((x) => x.name);
+  if (extra.length) {
+    kids.push(h1("รายวิชาเพิ่มเติม"));
+    extra.forEach((x, i) => { kids.push(p(`คำอธิบายรายวิชาเพิ่มเติม รายวิชา${x.name}${x.code ? ` รหัสวิชา ${x.code}` : ""}`, { bold: true, before: i ? 240 : 0, keepNext: true, pb: i > 0 })); kids.push(p(`กลุ่มสาระการเรียนรู้${b.subject} ชั้นประถมศึกษาปีที่ ${x.grade} เวลา ${x.hours} ชั่วโมง/ปี`, { bold: true, after: 120 })); kids.push(...body(x.desc)); });
+  }
   kids.push(h1("โครงสร้างเวลาเรียน"));
-  kids.push(p("เวลาเรียนของกลุ่มสาระการเรียนรู้ในแต่ละชั้นปี (ชั่วโมง/ปี)", { after: 120 }));
-  kids.push(table([5.6, ...grades.map(() => 1.8)], ["กลุ่มสาระ/กิจกรรม", ...grades.map((g) => `ป.${g}`)], [[`${b.subject}`, ...grades.map((g) => b.grades[g].hours)]], { center: grades.map((_, i) => i + 1) }));
+  const tt = b.timeTable?.length ? b.timeTable : [{ name: b.subject, h: grades.map((g) => b.grades[g].hours) }];
+  const G = [1, 2, 3, 4, 5, 6], sum = (k) => tt.reduce((a, r) => a + (Number(r.h?.[k]) || 0), 0);
+  kids.push(p("โครงสร้างเวลาเรียนระดับประถมศึกษา (ชั่วโมง/ปี)", { after: 120, align: C, bold: true }));
+  kids.push(table([5.6, ...G.map(() => 1.83)], ["กลุ่มสาระการเรียนรู้/กิจกรรม", ...G.map((g) => `ป.${g}`)],
+    [...tt.map((r) => r.group ? [{ span: true, t: r.name }] : [r.indent ? `   ${r.name}` : r.name, ...G.map((_, k) => r.h?.[k] ?? "-")]), [{ t: "รวมเวลาเรียนทั้งหมด", bold: true }, ...G.map((_, k) => ({ t: String(sum(k)), bold: true }))]], { center: G }));
+  if (T.activities) { kids.push(h1("กิจกรรมพัฒนาผู้เรียน")); kids.push(...body(T.activities)); }
+  if (T.management) { kids.push(h1("การจัดการเรียนรู้และการบริหารจัดการหลักสูตร")); kids.push(...body(T.management)); }
   kids.push(h1("เกณฑ์การวัดและการประเมินผล")); kids.push(...body(T.assess_criteria));
   kids.push(h1("อภิธานศัพท์")); kids.push(...body(T.glossary));
 
-  return new Document({ sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: cm(2), bottom: cm(1.8), left: cm(2.2), right: cm(2) } } },
+  return new Document({ features: { updateFields: true },
+    styles: { paragraphStyles: [{ id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: FONT, size: 40, bold: true, color: "000000" }, paragraph: { alignment: C } }] },
+    sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: cm(2), bottom: cm(1.8), left: cm(2.2), right: cm(2) } } },
     footers: { default: new Footer({ children: [new Paragraph({ alignment: C, children: [new TextRun({ text: th(`กลุ่มสาระการเรียนรู้${b.subject}   `), font: FONT, size: 26 }), new TextRun({ children: [PageNumber.CURRENT], font: FONT, size: 26 })] })] }) },
     children: kids }] });
 }
