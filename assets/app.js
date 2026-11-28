@@ -8,6 +8,7 @@ import {
 const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG;
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const KEYCOLS = "id,label,priority,enabled,exhausted_until,last_error,last_used_at,created_at,used_today,used_day,daily_limit";
 // ---------- helpers ----------
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -74,8 +75,9 @@ async function onSession(session) {
   S.user = session?.user ?? null;
   $("#auth").classList.toggle("hidden", !!S.user);
   $("#app").classList.toggle("hidden", !S.user);
-  if (S.user) await loadAll();
+  if (S.user) { await loadAll(); drawQuota(); }
 }
+document.addEventListener("click", (e) => { if (e.target.closest?.("#quota")) go("t7"); });
 $("#authForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const email = $("#authEmail").value.trim(), password = $("#authPass").value;
@@ -103,7 +105,7 @@ async function loadAll() {
     sb.from("app_settings").select("*").maybeSingle(),
     sb.from("curriculum_structures").select("*").order("created_at", { ascending: false }),
     sb.from("course_structures").select("*").order("created_at", { ascending: false }),
-    sb.from("api_keys").select("id,label,priority,enabled,exhausted_until,last_error,last_used_at,created_at").order("priority").order("created_at"),
+    sb.from("api_keys").select(KEYCOLS).order("priority").order("created_at"),
   ]);
   S.subjects = must(sj); S.curricula = must(cu); S.settings = must(st);
   S.curStructs = must(cs); S.courses = must(co); S.keys = must(ks);
@@ -204,6 +206,19 @@ function go(tab) {
 $("#steps").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) go(b.dataset.tab); });
 
 // ---------- AI ----------
+const ptDay = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
+const keyUsed = (k) => (k.used_day === ptDay() ? k.used_today ?? 0 : 0);
+const qColor = (pct) => `hsl(${Math.round(120 * (1 - Math.min(1, Math.max(0, pct))))} 75% 45%)`;
+const qBar = (used, limit, h = 10) => { const pct = limit ? used / limit : 0; return `<div class="qbar" style="height:${h}px"><i style="width:${Math.min(100, Math.round(pct * 100))}%;background:${qColor(pct)}"></i></div>`; };
+function drawQuota() {
+  const el = $("#quota"); if (!el) return;
+  const ks = (S.keys ?? []).filter((k) => k.enabled);
+  if (!ks.length) { el.innerHTML = '<span class="muted small">ยังไม่มีคีย์ AI</span>'; return; }
+  const used = ks.reduce((a, k) => a + keyUsed(k), 0), lim = ks.reduce((a, k) => a + (k.daily_limit ?? 250), 0), pct = lim ? used / lim : 0;
+  el.title = `โควตา AI วันนี้: ใช้ ${used} จาก ${lim} ครั้ง (นับเอง รีเซ็ตเที่ยงคืนเวลาแปซิฟิก)`;
+  el.innerHTML = `<span class="small">AI ${used}/${lim}</span>${qBar(used, lim, 8)}${pct >= 1 ? '<span class="pill bad">เต็ม</span>' : ""}`;
+}
+async function refreshQuota() { try { S.keys = must(await sb.from("api_keys").select(KEYCOLS).order("priority").order("created_at")); drawQuota(); } catch {} }
 async function callAI(prompt, { json = true, system = SYSTEM_PROMPT } = {}) {
   const { data: { session } } = await sb.auth.getSession();
   const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-generate`, {
@@ -216,6 +231,7 @@ async function callAI(prompt, { json = true, system = SYSTEM_PROMPT } = {}) {
     if (out.code === "NO_KEYS") throw new Error("ยังไม่มี API key — ไปที่แถบ ⚙ ตั้งค่า แล้วเพิ่มคีย์ก่อน");
     throw new Error(out.error || "เรียก AI ไม่สำเร็จ");
   }
+  refreshQuota();
   const used = out.attempts?.length ? ` (สลับคีย์ ${out.attempts.length} ครั้ง ใช้ "${out.key_label}")` : "";
   if (used) toast("ใช้คีย์สำรอง" + used);
   if (!json) return out.text;
@@ -545,7 +561,7 @@ async function t9Draft(cx) {
 const t9Msg = (m) => { const e = $("#t9st"); if (e) e.textContent = m; };
 const t9Save = async (doc, name) => (await import("./export.js")).saveBlob(await (await import("./curdoc.js")).docBlob(doc), safeName(name) + ".docx");
 // ---------- tab 0: school curriculum book ----------
-const BK = { subject: 5, curriculum: "2551r60", book: null, books: null, busy: false };
+const BK = { open: new Set(), subject: 5, curriculum: "2551r60", book: null, books: null, busy: false };
 const bkGet = (o, path) => path.split(".").reduce((a, k) => a?.[k], o);
 const bkSet = (o, path, v) => { const ks = path.split("."); const last = ks.pop(); const t = ks.reduce((a, k) => (a[k] ??= {}), o); t[last] = v; };
 let bkTimer;
@@ -569,15 +585,16 @@ const bkStrands = () => [...new Set((BK.stds ?? []).map(bkStrandNo))].sort((a, b
 const bkStrandName = (n) => (BK.stds ?? []).find((x) => bkStrandNo(x) === n)?.strand_name ?? "";
 function renderBook() {
   const b = BK.book, d = b.data, ed = $("#bkedit"); if (!ed) return;
+  const sy = window.scrollY;
   const filled = (v) => (v && String(v).trim() ? "✓" : "○");
   const ta = (path, rows = 6) => `<textarea rows="${rows}" data-bk="${path}">${esc(bkGet(d, path) ?? "")}</textarea>`;
-  const texts = BOOK_TEXTS.map(([k, t]) => `<details class="card"><summary><b>${filled(d.texts?.[k])}${d.reviewed?.["t_" + k] ? "✔" : ""} ${esc(t)}</b></summary><div class="row" style="margin:8px 0"><button class="btn small primary" data-act="bk-ai-text" data-k="${k}">AI ร่างเฉพาะส่วนนี้</button><label style="flex-direction:row;gap:6px;color:var(--text)"><input type="checkbox" data-bk="reviewed.t_${k}" ${d.reviewed?.["t_" + k] ? "checked" : ""}> ตรวจแล้ว</label></div>${ta("texts." + k, 12)}</details>`).join("");
+  const texts = BOOK_TEXTS.map(([k, t]) => `<details class="card" data-dk="t_${k}"><summary><b>${filled(d.texts?.[k])}${d.reviewed?.["t_" + k] ? "✔" : ""} ${esc(t)}</b></summary><div class="row" style="margin:8px 0"><button class="btn small primary" data-act="bk-ai-text" data-k="${k}">AI ร่างเฉพาะส่วนนี้</button><label style="flex-direction:row;gap:6px;color:var(--text)"><input type="checkbox" data-bk="reviewed.t_${k}" ${d.reviewed?.["t_" + k] ? "checked" : ""}> ตรวจแล้ว</label></div>${ta("texts." + k, 12)}</details>`).join("");
   const gr = [1, 2, 3, 4, 5, 6].map((g) => { const x = d.grades?.[g] ?? {}; const st = x.structure ?? [];
-    return `<details class="card"><summary><b>${filled(x.desc)}${st.length ? "✓" : "○"}${Object.keys(x.core ?? {}).length ? "✓" : "○"}${d.reviewed?.["g" + g] ? "✔" : ""} ชั้นประถมศึกษาปีที่ ${g}</b> <span class="muted small">${st.length} แถวโครงสร้าง · ${Object.keys(x.core ?? {}).length} สาระแกนกลาง</span></summary>
+    return `<details class="card" data-dk="g${g}"><summary><b>${filled(x.desc)}${st.length ? "✓" : "○"}${Object.keys(x.core ?? {}).length ? "✓" : "○"}${d.reviewed?.["g" + g] ? "✔" : ""} ชั้นประถมศึกษาปีที่ ${g}</b> <span class="muted small">${st.length} แถวโครงสร้าง · ${Object.keys(x.core ?? {}).length} สาระแกนกลาง</span></summary>
       <div class="grid" style="margin:8px 0"><label>รหัสวิชา<input data-bk="grades.${g}.code" value="${esc(x.code ?? "")}"></label><label>ชื่อรายวิชา<input data-bk="grades.${g}.name" value="${esc(x.name ?? "")}"></label><label>ชั่วโมง/ปี<input type="number" data-bk="grades.${g}.hours" value="${x.hours ?? 80}"></label></div>
       <div class="row" style="margin-bottom:8px"><button class="btn small" data-act="bk-use-course" data-g="${g}">ใช้โครงสร้างจากรายวิชาที่สร้างไว้ (แถบ 2)</button></div>
       <div class="card" style="padding:10px"><div class="row"><b>① สาระการเรียนรู้แกนกลาง</b><span class="muted small">ทำทีละสาระ</span></div><div class="row" style="margin-top:6px">${bkStrands().map((n) => `<button class="btn small" data-act="bk-ai-core" data-g="${g}" data-n="${n}">AI สาระที่ ${n}</button>`).join("") || '<span class="muted small">ไม่พบสาระ</span>'}</div>
-      <details style="margin-top:8px"><summary>แก้ไขรายตัวชี้วัด (${Object.keys(x.core ?? {}).length})</summary>${Object.entries(x.core ?? {}).map(([c, v]) => `<label>${esc(c.replace(/‧/g, "."))}<textarea rows="2" data-bk="grades.${g}.core.${c}">${esc(v)}</textarea></label>`).join("") || '<div class="muted small">ยังไม่มี</div>'}</details></div>
+      <details style="margin-top:8px" data-dk="gc${g}"><summary>แก้ไขรายตัวชี้วัด (${Object.keys(x.core ?? {}).length})</summary>${Object.entries(x.core ?? {}).map(([c, v]) => `<label>${esc(c.replace(/‧/g, "."))}<textarea rows="2" data-bk="grades.${g}.core.${c}">${esc(v)}</textarea></label>`).join("") || '<div class="muted small">ยังไม่มี</div>'}</details></div>
       <div class="card" style="padding:10px"><div class="row"><b>② โครงสร้างรายวิชา</b><button class="btn small" data-act="bk-ai-struct" data-g="${g}">AI ร่างหน่วย/ชั่วโมง/คะแนน</button></div>
       ${st.map((r, i) => `<div class="card" style="padding:8px"><div class="grid"><label>ชื่อหน่วย<input data-bk="grades.${g}.structure.${i}.name" value="${esc(r.name ?? "")}"></label><label>ตัวชี้วัด (คั่นด้วย ,)<input data-bkl="grades.${g}.structure.${i}.indicator_codes" value="${esc((r.indicator_codes ?? []).join(", "))}"></label><label>ชั่วโมง<input type="number" data-bk="grades.${g}.structure.${i}.hours" value="${r.hours ?? 0}"></label><label>คะแนน<input type="number" data-bk="grades.${g}.structure.${i}.score_weight" value="${r.score_weight ?? 0}"></label></div><label>เนื้อหา</label><textarea rows="2" data-bk="grades.${g}.structure.${i}.content">${esc(r.content ?? "")}</textarea></div>`).join("") || '<div class="muted small">ยังไม่มี</div>'}</div>
       <div class="card" style="padding:10px"><div class="row"><b>③ คำอธิบายรายวิชา</b><button class="btn small" data-act="bk-ai-desc" data-g="${g}">AI ร่างคำอธิบาย</button></div>${ta(`grades.${g}.desc`, 8)}</div>
@@ -586,7 +603,10 @@ function renderBook() {
   ed.innerHTML = `<div class="card accent"><h3>${esc(b.title)}</h3><div class="row"><button class="btn accent" data-act="bk-doc">ดาวน์โหลด Word ทั้งเล่ม</button><button class="btn" data-act="bk-next">ไปรายวิชา → แถบ 2</button></div>
     <div class="muted small" style="margin-top:6px">กด AI ทีละส่วน ตรวจแล้วติ๊ก "ตรวจแล้ว" ✔ = ตรวจแล้ว ✓ = มีเนื้อหา ○ = ยังว่าง</div><div class="muted small" id="bkst" style="margin-top:6px"></div></div>
     <h3>ส่วนหน้า/ท้ายเล่ม</h3>${texts}<h3>รายชั้น ป.1–6</h3>${gr}`;
+  $$("#bkedit details[data-dk]").forEach((x) => { if (BK.open.has(x.dataset.dk)) x.open = true; });
+  window.scrollTo?.(0, sy);
 }
+document.addEventListener("toggle", (e) => { const x = e.target; if (x?.dataset?.dk) x.open ? BK.open.add(x.dataset.dk) : BK.open.delete(x.dataset.dk); }, true);
 const bkSub = () => subjName(BK.book.subject_id);
 async function bkCtx() {
   const b = BK.book, d = b.data;
@@ -632,8 +652,10 @@ async function bkDoc() {
   const blob = await m.bookBlob({ thNum, school: S.settings?.school_name ?? "", year: S.settings?.academic_year ?? "", subject: bkSub(), curriculumName: S.curricula.find((x) => x.id === b.curriculum_id)?.name ?? b.curriculum_id, texts: d.texts ?? {}, grades, standards: c.stds, indicators: c.inds });
   (await import("./export.js")).saveBlob(blob, safeName(`เล่มหลักสูตร_${bkSub()}`) + ".docx");
 }
-document.addEventListener("change", (e) => {
-  const t = e.target; if (!BK.book) return;
+document.addEventListener("change", async (e) => {
+  const t = e.target;
+  if (t.dataset?.klim) { try { must(await sb.from("api_keys").update({ daily_limit: Math.max(1, num(t.value)) }).eq("id", t.dataset.klim)); await refreshQuota(); render7(); } catch (er) { toast(er.message, "err"); } return; }
+  if (!BK.book) return;
   if (t.dataset?.bk) { let v = t.type === "checkbox" ? t.checked : t.value; if (t.type === "number") v = num(v); bkSet(BK.book.data, t.dataset.bk, v); bkSave(); }
   if (t.dataset?.bkl) { bkSet(BK.book.data, t.dataset.bkl, t.value.split(",").map((x) => x.trim()).filter(Boolean)); bkSave(); }
 });
@@ -687,13 +709,13 @@ function render7() {
     <div class="row" style="margin-top:10px"><button class="btn primary" data-act="s-save">บันทึกการตั้งค่า</button><button class="btn" data-act="s-models">ดึงรายชื่อโมเดลจากคีย์</button></div>
   </div>
   <div class="card"><h3>Google API Key (Gemini)</h3>
-    <p class="muted small">วางได้หลายอัน ระบบใช้ตามลำดับ ถ้าอันแรกหมดโควตาจะข้ามไปอันถัดไปเองและพักอันนั้นไว้ คีย์เก็บในฐานข้อมูลของคุณและถูกใช้ผ่านฟังก์ชันฝั่งเซิร์ฟเวอร์เท่านั้น</p>
+    <p class="muted small">หลอดโควตาเป็นการนับเองจากจำนวนครั้งที่ระบบเรียก AI วันนี้ (Google ไม่บอกโควตาที่เหลือ) ปรับตัวเลขเพดานให้ตรงกับของคีย์คุณได้ รีเซ็ตเที่ยงคืนเวลาแปซิฟิก เขียว = เหลือเยอะ แดง = ใกล้เต็ม</p><p class="muted small">วางได้หลายอัน ระบบใช้ตามลำดับ ถ้าอันแรกหมดโควตาจะข้ามไปอันถัดไปเองและพักอันนั้นไว้ คีย์เก็บในฐานข้อมูลของคุณและถูกใช้ผ่านฟังก์ชันฝั่งเซิร์ฟเวอร์เท่านั้น</p>
     <div class="grid"><label>ชื่อเรียก<input id="kLabel" placeholder="เช่น คีย์ 1"></label><label>API Key<input id="kVal" type="password" placeholder="AIza..." autocomplete="off"></label></div>
     <div class="row" style="margin:10px 0"><button class="btn accent" data-act="k-add">+ เพิ่มคีย์</button></div>
     <div class="list">${S.keys.map((k, i) => {
       const cooling = k.exhausted_until && new Date(k.exhausted_until) > new Date();
       const pill = !k.enabled ? '<span class="pill bad">ปิดอยู่</span>' : cooling ? `<span class="pill warn">โควตาหมด ถึง ${new Date(k.exhausted_until).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}</span>` : '<span class="pill ok">พร้อมใช้</span>';
-      return `<div class="item"><div><div class="t">${i + 1}. ${esc(k.label)} ${pill}</div><div class="muted small">${esc(k.last_error ?? "")}${k.last_used_at ? " · ใช้ล่าสุด " + new Date(k.last_used_at).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" }) : ""}</div></div>
+      return `<div class="item"><div><div class="t">${i + 1}. ${esc(k.label)} ${pill}</div><div style="min-width:220px;margin:4px 0">${qBar(keyUsed(k), k.daily_limit ?? 250, 12)}<div class="small">ใช้วันนี้ ${keyUsed(k)} / <input type="number" data-klim="${k.id}" value="${k.daily_limit ?? 250}" style="width:80px;display:inline-block;padding:2px 6px"> ครั้ง</div></div><div class="muted small">${esc(k.last_error ?? "")}${k.last_used_at ? " · ใช้ล่าสุด " + new Date(k.last_used_at).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" }) : ""}</div></div>
       <div class="row"><button class="btn small" data-act="k-up" data-id="${k.id}">↑</button><button class="btn small" data-act="k-down" data-id="${k.id}">↓</button><button class="btn small" data-act="k-toggle" data-id="${k.id}">${k.enabled ? "ปิด" : "เปิด"}</button><button class="btn small" data-act="k-reset" data-id="${k.id}">ล้างสถานะ</button><button class="btn small danger" data-act="k-del" data-id="${k.id}">ลบ</button></div></div>`;
     }).join("") || '<div class="muted">ยังไม่มีคีย์</div>'}</div>
   </div>
@@ -945,7 +967,7 @@ const actions = {
   "k-down": (b) => moveKey(b.dataset.id, 1),
 };
 async function reloadKeys() {
-  S.keys = must(await sb.from("api_keys").select("id,label,priority,enabled,exhausted_until,last_error,last_used_at,created_at").order("priority").order("created_at")); render7();
+  S.keys = must(await sb.from("api_keys").select(KEYCOLS).order("priority").order("created_at")); render7();
 }
 async function moveKey(id, d) {
   const i = S.keys.findIndex((k) => k.id === id), j = i + d; if (j < 0 || j >= S.keys.length) return;
