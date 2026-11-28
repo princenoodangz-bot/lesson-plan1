@@ -795,7 +795,7 @@ const T9 = { subject: 5, curriculum: "2551r60", grade: 5 };
 function render9() {
   const el = $("#t9");
   const cl = S.courses.map((c) => `<div class="item"><div><div class="t">${esc(c.course_code ?? "")} ${esc(c.course_name)}</div><div class="muted small">${esc(subjName(c.subject_id))} · ป.${c.grade} · ${esc(c.curriculum_id)} · ${c.total_hours} ชม.${csOfCourse(c)?.content?.doc?.course_description ? " · มีเนื้อหาหลักสูตรแล้ว" : ""}</div></div>
-    <div class="row"><button class="btn small primary" data-act="t9-cur" data-id="${c.id}">หลักสูตรสถานศึกษา (Word)</button><button class="btn small accent" data-act="t9-sch" data-id="${c.id}">กำหนดการสอน (Word)</button><button class="btn small accent" data-act="t9-hour" data-id="${c.id}">กำหนดการสอนรายชั่วโมง (Word)</button><button class="btn small" data-act="t9-aidoc" data-id="${c.id}">AI ร่างเนื้อหาหลักสูตร</button></div></div>`).join("") || '<div class="muted">ยังไม่มีรายวิชา ใช้ฟอร์มด้านบนสร้างได้เลย</div>';
+    <div class="row"><button class="btn small primary" data-act="t9-cur" data-id="${c.id}">หลักสูตรสถานศึกษา (Word)</button><button class="btn small accent" data-act="t9-sch" data-id="${c.id}">กำหนดการสอน (Word)</button><button class="btn small" data-act="t9-aidoc" data-id="${c.id}">AI ร่างเนื้อหาหลักสูตร</button></div></div>`).join("") || '<div class="muted">ยังไม่มีรายวิชา ใช้ฟอร์มด้านบนสร้างได้เลย</div>';
   el.innerHTML = `<div class="card accent"><h2>2 · หลักสูตรสถานศึกษา และกำหนดการสอน <span class="muted small">— สร้างตั้งแต่ต้นด้วย AI แล้วโหลดเป็น Word</span></h2>
     <p class="muted small">กดครั้งเดียว ระบบดึงตัวชี้วัดจริงจากฐานข้อมูล → AI ร่างเนื้อหาหลักสูตร → AI ร่างหน่วยการเรียนรู้ ชั่วโมง คะแนน → สร้างหน่วย แก้ไขต่อได้ที่แถบ 0 กับแถบ 3–4</p>
     <div class="grid">
@@ -831,8 +831,6 @@ async function t9Draft(cx) {
   if (cx.cs) { const content = { ...cx.cs.content, doc }; must(await sb.from("curriculum_structures").update({ content }).eq("id", cx.cs.id)); cx.cs.content = content; }
   cx.doc = doc; return doc;
 }
-let HOURLY = null;
-const t9HourSave = async () => { const cx = HOURLY; if (!cx) return; await t9Save(await (await import("./curdoc.js")).buildHourlyDoc(cx), `กำหนดการสอนรายชั่วโมง_${cx.courseCode || cx.courseName}`); toast(cx.model.issues.length ? `ดาวน์โหลดแล้ว (ยังมี ${cx.model.issues.length} จุดที่ควรตรวจ)` : "ดาวน์โหลดแล้ว — ชั่วโมงและตัวชี้วัดตรงกับหน่วยทุกจุด", cx.model.issues.length ? "" : "ok"); };
 const t9Msg = (m) => { const e = $("#t9st"); if (e) e.textContent = m; };
 const t9Save = async (doc, name) => (await import("./export.js")).saveBlob(await (await import("./curdoc.js")).docBlob(doc), safeName(name) + ".docx");
 // ---------- tab 0: school curriculum book ----------
@@ -1597,17 +1595,6 @@ Object.assign(actions, {
 Object.assign(actions, {
   "t9-cur": (b) => busy(b, async () => { const cx = await t9Ctx(b.dataset.id); if (!cx.doc?.course_description) await t9Draft(cx); await t9Save(await (await import("./curdoc.js")).buildCurriculumDoc(cx), `หลักสูตร_${cx.courseCode || cx.courseName}`); render9(); }),
   "t9-sch": (b) => busy(b, async () => { const cx = await t9Ctx(b.dataset.id); await t9Save(await (await import("./curdoc.js")).buildScheduleDoc(cx), `โครงสร้างกำหนดการสอน_${cx.courseCode || cx.courseName}`); }),
-  "t9-hour": (b) => busy(b, async () => {
-    const cx = await t9Ctx(b.dataset.id), cur = await import("./curdoc.js");
-    const ids = cx.units.map((u) => u.id);
-    cx.plans = ids.length ? must(await sb.from("lesson_plans").select("id,unit_id,seq,title,hours,indicator_codes,planned_date").in("unit_id", ids).order("seq")).map((x) => ({ ...x, indicator_codes: x.indicator_codes ?? [] })) : [];
-    cx.model = cur.hourlyModel(cx); HOURLY = cx;
-    if (!cx.model.issues.length) return t9HourSave();
-    openModal(`<h3>ตรวจความสอดคล้องก่อนสร้างกำหนดการรายชั่วโมง</h3><p class="muted small">พบ ${cx.model.issues.length} จุดที่ไม่ตรงกัน แก้ที่แถบ 3-5 แล้วกดใหม่ หรือจะดาวน์โหลดทั้งอย่างนี้ก็ได้</p>
-      <div class="list" style="max-height:50vh;overflow:auto">${cx.model.issues.map((i) => `<div class="item small">⚠ ${esc(i)}</div>`).join("")}</div>
-      <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t9-hour-go">ดาวน์โหลดต่อ</button><button class="btn" data-act="close-modal">ยกเลิก</button></div>`);
-  }),
-  "t9-hour-go": (b) => busy(b, async () => { closeModal(); await t9HourSave(); }),
   "t9-aidoc": (b) => busy(b, async () => { const cx = await t9Ctx(b.dataset.id); await t9Draft(cx); toast("AI ร่างเนื้อหาหลักสูตรแล้ว กด 'หลักสูตรสถานศึกษา (Word)' เพื่อโหลด", "ok"); render9(); }),
   "t9-all": (b) => busy(b, async () => {
     const code = $("#t9code").value.trim(), name = $("#t9name").value.trim(), total = num($("#t9hours").value), sem = Number($("#t9sem").value);
