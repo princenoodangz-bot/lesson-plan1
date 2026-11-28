@@ -973,12 +973,12 @@ function render7() {
   <div class="card"><h3>Google API Key (Gemini)</h3>
     <p class="muted small">หลอดโควตาเป็นการนับเองจากจำนวนครั้งที่ระบบเรียก AI วันนี้ (Google ไม่บอกโควตาที่เหลือ) ปรับตัวเลขเพดานให้ตรงกับของคีย์คุณได้ รีเซ็ตเที่ยงคืนเวลาแปซิฟิก เขียว = เหลือเยอะ แดง = ใกล้เต็ม</p><p class="muted small">วางได้หลายอัน ระบบใช้ตามลำดับ ถ้าอันแรกหมดโควตาจะข้ามไปอันถัดไปเองและพักอันนั้นไว้ คีย์เก็บในฐานข้อมูลของคุณและถูกใช้ผ่านฟังก์ชันฝั่งเซิร์ฟเวอร์เท่านั้น</p>
     <div class="grid"><label>ชื่อเรียก<input id="kLabel" placeholder="เช่น คีย์ 1"></label><label>API Key<input id="kVal" type="password" placeholder="AIza..." autocomplete="off"></label></div>
-    <div class="row" style="margin:10px 0"><button class="btn accent" data-act="k-add">+ เพิ่มคีย์</button></div>
+    <div class="row" style="margin:10px 0"><button class="btn accent" data-act="k-add">+ เพิ่มคีย์</button><button class="btn" data-act="k-check-all">ตรวจคีย์จริงทั้งหมด</button></div>
     <div class="list">${S.keys.map((k, i) => {
       const cooling = k.exhausted_until && new Date(k.exhausted_until) > new Date();
       const pill = !k.enabled ? '<span class="pill bad">ปิดอยู่</span>' : cooling ? `<span class="pill warn">โควตาหมด ถึง ${new Date(k.exhausted_until).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}</span>` : '<span class="pill ok">พร้อมใช้</span>';
-      return `<div class="item"><div><div class="t">${i + 1}. ${esc(k.label)} ${pill}</div><div style="min-width:220px;margin:4px 0">${qBar(keyUsed(k), k.daily_limit ?? 250, 12)}<div class="small">ใช้วันนี้ ${keyUsed(k)} / <input type="number" data-klim="${k.id}" value="${k.daily_limit ?? 250}" style="width:80px;display:inline-block;padding:2px 6px"> ครั้ง</div></div><div class="muted small">${esc(k.last_error ?? "")}${k.last_used_at ? " · ใช้ล่าสุด " + new Date(k.last_used_at).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" }) : ""}</div></div>
-      <div class="row"><button class="btn small" data-act="k-up" data-id="${k.id}">↑</button><button class="btn small" data-act="k-down" data-id="${k.id}">↓</button><button class="btn small" data-act="k-toggle" data-id="${k.id}">${k.enabled ? "ปิด" : "เปิด"}</button><button class="btn small" data-act="k-reset" data-id="${k.id}">ล้างสถานะ</button><button class="btn small danger" data-act="k-del" data-id="${k.id}">ลบ</button></div></div>`;
+      return `<div class="item"><div><div class="t">${i + 1}. ${esc(k.label)} ${pill}</div><div style="min-width:220px;margin:4px 0">${qBar(keyUsed(k), k.daily_limit ?? 250, 12)}<div class="small">ใช้วันนี้ ${keyUsed(k)} / <input type="number" data-klim="${k.id}" value="${k.daily_limit ?? 250}" style="width:80px;display:inline-block;padding:2px 6px"> ครั้ง</div></div><div class="small" data-kres="${k.id}">${KRES[k.id] ?? ""}</div><div class="muted small">${esc(k.last_error ?? "")}${k.last_used_at ? " · ใช้ล่าสุด " + new Date(k.last_used_at).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" }) : ""}</div></div>
+      <div class="row"><button class="btn small primary" data-act="k-check" data-id="${k.id}">ตรวจ</button><button class="btn small" data-act="k-up" data-id="${k.id}">↑</button><button class="btn small" data-act="k-down" data-id="${k.id}">↓</button><button class="btn small" data-act="k-toggle" data-id="${k.id}">${k.enabled ? "ปิด" : "เปิด"}</button><button class="btn small" data-act="k-reset" data-id="${k.id}">ล้างสถานะ</button><button class="btn small danger" data-act="k-del" data-id="${k.id}">ลบ</button></div></div>`;
     }).join("") || '<div class="muted">ยังไม่มีคีย์</div>'}</div>
   </div>
   <div class="card"><h3>สำรอง / กู้คืนข้อมูล</h3>
@@ -990,7 +990,17 @@ function render7() {
 // =====================================================================
 // actions (event delegation)
 // =====================================================================
+const KRES = {};
+async function checkKey(id) {
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/key-check`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY }, body: JSON.stringify({ id }) });
+  const o = await res.json().catch(() => ({}));
+  const good = o.state === "ok", warn = o.state === "minute";
+  KRES[id] = `<span style="color:${good ? "#2e7d32" : warn ? "var(--warn)" : "var(--red)"}"><b>${good ? "✓" : warn ? "!" : "✗"} ${esc(o.message || o.error || "ตรวจไม่สำเร็จ")}</b> <span class="muted">(${new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })})</span></span>`;
+}
 const actions = {
+  "k-check": (b) => busy(b, async () => { await checkKey(b.dataset.id); await reloadKeys(); }),
+  "k-check-all": (b) => busy(b, async () => { for (const k of S.keys.filter((x) => x.enabled)) await checkKey(k.id); await reloadKeys(); }),
   goto: (b) => go(b.dataset.tab),
 
   // ---- tab 1
