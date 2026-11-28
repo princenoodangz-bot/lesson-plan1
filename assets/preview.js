@@ -92,7 +92,7 @@ export function planPreviewHtml(ctx, plan) {
 
   (sec.attachments ?? []).forEach((a, i) => {
     if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim()) return;
-    out.push(`<hr><h3 class="c">เอกสารแนบที่ ${i + 1} ${esc(a.title)}</h3>${parseAttachment(a.body).map((b) => b.t === "tbl" ? `<table class="pt"><tr>${b.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>${b.rows.map((r) => `<tr>${r.map((c, k) => `<td${k === 0 && b.head.length === 3 ? ' class="c"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>` : P(b.text, "ind0")).join("")}`);
+    out.push(`<hr><h3 class="c">เอกสารแนบที่ ${i + 1} ${esc(a.title)}</h3>${parseAttachment(a.body).map((b) => b.t === "tbl" ? `<table class="pt"><tr>${b.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>${b.rows.map((r) => `<tr>${r.map((c, k) => `<td${k === 0 && b.head.length === 3 ? ' class="c"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>` : b.t === "dots" ? `<div class="dots"></div>` : P(b.text, "ind0")).join("")}`);
   });
   const html = out.join("").replace(/>([^<]*)</g, (m, t) => ">" + th(t) + "<");
   return `<div class="paper">${html}</div>`;

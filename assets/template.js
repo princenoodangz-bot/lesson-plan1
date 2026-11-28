@@ -294,7 +294,7 @@ export function parseAttachment(body) {
       const rows = g.filter((r) => !r.every((c) => /^[-:\s]+$/.test(c))), n = Math.max(...rows.map((r) => r.length));
       if (rows.length >= 2 && n >= 2) { out.push({ t: "tbl", head: rows[0], rows: rows.slice(1).map((r) => Array.from({ length: n }, (_, k) => r[k] ?? "")), w: Array.from({ length: n }, () => 16 / n) }); continue; }
       rows.forEach((r) => out.push({ t: "p", text: r.join(" | ") })); continue; }
-    if (L[i].trim()) out.push({ t: "p", text: L[i] }); i++;
+    if (L[i].trim()) { const m = L[i].match(/^(.*?)\s*[.…_·]{6,}\s*$/); if (m) { if (m[1].trim()) out.push({ t: "p", text: m[1] }); out.push({ t: "dots" }); } else out.push({ t: "p", text: L[i] }); } i++;
   }
   return out;
 }

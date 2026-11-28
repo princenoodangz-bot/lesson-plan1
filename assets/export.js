@@ -166,6 +166,7 @@ export async function buildDoc(ctx, plans) {
       if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim()) return;
       out.push(para(`เอกสารแนบที่ ${ai + 1}  ${a.title ?? ""}`, { bold: true, align: AlignmentType.CENTER, pageBreakBefore: true, line: 240 }));
       parseAttachment(a.body).forEach((b) => {
+        if (b.t === "dots") return out.push(dl());
         if (b.t === "p") return out.push(para(b.text, { indent: { left: cm(0.6) } }));
         const hdr = new TableRow({ tableHeader: true, children: b.head.map((t, i) => cell([para(t, { bold: true, align: AlignmentType.CENTER })], b.w[i], { fill: "F2F2F2" })) });
         const rws = b.rows.map((r) => new TableRow({ cantSplit: true, children: r.map((t, i) => cell([para(t, i === 0 && b.head.length === 3 ? { align: AlignmentType.CENTER } : {})], b.w[i])) }));
