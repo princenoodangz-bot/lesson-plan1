@@ -661,7 +661,7 @@ async function renderPlanEditor() {
         <div class="row">${(a.images ?? []).map((m, k) => `<div style="position:relative"><img src="${m.data}" alt="" style="height:90px;border:1px solid var(--line);border-radius:6px"><button type="button" class="btn small danger" data-act="t4-att-imgdel" data-i="${i}" data-k="${k}" style="position:absolute;top:2px;right:2px;padding:0 6px">×</button></div>`).join("")}</div>
         <input type="file" accept="image/*" multiple data-attimg="${i}">
         <button class="btn small danger" data-act="t4-att-del" data-i="${i}">ลบเอกสารนี้</button></div>`).join("") || '<div class="muted">ยังไม่มีเอกสารแนบ</div>'}
-      <div class="card" style="padding:10px;border-style:dashed"><b class="small">🎨 ให้ AI สร้างใบงานเป็นรูปสวย ๆ ใส่ใน Word</b><div class="row" style="margin-top:6px"><label class="small" style="flex-direction:row;gap:6px;align-items:center">จำนวนข้อ<input type="number" id="wsN" value="7" min="3" max="12" style="width:70px"></label><label class="small" style="flex-direction:row;gap:6px;align-items:center">แบบ<select id="wsMode" style="width:auto"><option value="img">รูปจาก AI (Gemini วาดทั้งใบ)</option><option value="card">การ์ดสะอาด (ไทยถูก 100%)</option></select></label><label class="small" style="flex-direction:row;gap:6px;align-items:center">สี<select id="wsTheme" style="width:auto"><option value="blue">ฟ้า</option><option value="pink">ชมพู</option><option value="green">เขียว</option><option value="orange">ส้ม</option><option value="purple">ม่วง</option></select></label><input id="wsExtra" placeholder="ข้อความเพิ่มเติม (ถ้ามี) เช่น เน้นข้อวาดภาพ" style="flex:1;min-width:180px"><button class="btn small primary" data-act="t4-ws">🎨 สร้างใบงาน</button></div></div>
+      <div class="card" style="padding:10px;border-style:dashed"><b class="small">🎨 ให้ AI สร้างใบงานเป็นรูปสวย ๆ ใส่ใน Word</b><div class="row" style="margin-top:6px"><label class="small" style="flex-direction:row;gap:6px;align-items:center">จำนวนข้อ<input type="number" id="wsN" value="7" min="3" max="12" style="width:70px"></label><label class="small" style="flex-direction:row;gap:6px;align-items:center">แบบ<select id="wsMode" style="width:auto"><option value="img">รูปจาก AI (Gemini วาดทั้งใบ)</option><option value="card">การ์ดสะอาด (ไทยถูก 100%)</option></select></label><label class="small" style="flex-direction:row;gap:6px;align-items:center">สี<select id="wsTheme" style="width:auto"><option value="blue">ฟ้า</option><option value="pink">ชมพู</option><option value="green">เขียว</option><option value="orange">ส้ม</option><option value="purple">ม่วง</option></select></label><input id="wsExtra" placeholder="ข้อความเพิ่มเติม (ถ้ามี) เช่น เน้นข้อวาดภาพ" style="flex:1;min-width:180px"><button class="btn small primary" data-act="t4-ws">🎨 สร้างใบงาน</button><button class="btn small" data-act="t4-ws-prompt">📋 คัดลอกคำสั่งไปวางใน ChatGPT</button></div></div>
       <div class="row"><button class="btn small" data-act="t4-att-add">+ เพิ่มเอกสารแนบ</button><button class="btn small accent" data-act="t4-att-ai">✨ AI ร่างใบงาน + รูบริก</button></div></div></details>
     <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t4-save">บันทึกแผนนี้</button><button class="btn" data-act="t4-save-next">บันทึกและไปแผนถัดไป →</button></div>
   </div>`;
@@ -1149,6 +1149,18 @@ const actions = {
   }),
   "t4-as-add": () => { collectPlan(); S.plan.sections.assessment.push({ item: "รายการใหม่", method: "", tool: "", criteria: "" }); renderPlanEditor(); },
   "t4-as-del": (b) => { collectPlan(); S.plan.sections.assessment.splice(Number(b.dataset.i), 1); renderPlanEditor(); },
+  "t4-ws-prompt": (b) => busy(b, async () => {
+    collectPlan(); const all = await courseIndicators(), c = S.course, p = S.plan;
+    const count = Math.max(3, Math.min(12, num($("#wsN")?.value) || 7)), theme = $("#wsTheme")?.value || "blue";
+    toast("AI กำลังออกแบบข้อคำถาม...");
+    const ws = await callAI(promptWorksheet({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: p, indicators: all.filter((i) => p.indicator_codes.includes(i.code)), count, extra: $("#wsExtra")?.value }));
+    if (!Array.isArray(ws.questions) || !ws.questions.length) throw new Error("AI ไม่ได้ส่งข้อคำถามมา ลองใหม่อีกครั้ง");
+    const m = await import("./worksheet.js"), sub = `${subjName(c.subject_id)} ป.${c.grade} · หน่วยที่ ${S.unit.seq} ${S.unit.name}`;
+    const txt = promptWorksheetImage(ws, { theme: m.THEMES[theme]?.name ?? "ฟ้า", grade: c.grade, sub });
+    let copied = false; try { await navigator.clipboard.writeText(txt); copied = true; } catch {}
+    openModal(`<h3>คำสั่งสำหรับ ChatGPT</h3><p class="small">${copied ? "คัดลอกแล้ว — " : "คัดลอกข้อความด้านล่างแล้ว "}ไปวางใน ChatGPT เพื่อสร้างรูป จากนั้นบันทึกรูปแล้วแนบที่ช่อง "รูปใบงาน/รูปประกอบ"</p><textarea rows="12" readonly style="width:100%">${esc(txt)}</textarea><div class="row" style="margin-top:10px"><button class="btn primary" id="mCancel">ปิด</button></div>`);
+    $("#mCancel").onclick = closeModal;
+  }),
   "t4-ws": (b) => busy(b, async () => {
     collectPlan(); const all = await courseIndicators(), c = S.course, p = S.plan;
     const count = Math.max(3, Math.min(12, num($("#wsN")?.value) || 7)), theme = $("#wsTheme")?.value || "blue";
