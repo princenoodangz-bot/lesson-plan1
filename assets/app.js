@@ -2,7 +2,7 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 import {
   SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
-  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
+  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
 } from "./template.js";
 
 const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG;
@@ -222,12 +222,12 @@ function drawQuota() {
   el.innerHTML = `<span class="small">AI ${used}/${lim}</span>${qBar(used, lim, 8)}${pct >= 1 ? '<span class="pill bad">เต็ม</span>' : ""}`;
 }
 async function refreshQuota() { try { S.keys = must(await sb.from("api_keys").select(KEYCOLS).order("priority").order("created_at")); drawQuota(); } catch {} }
-async function callAI(prompt, { json = true, system = SYSTEM_PROMPT } = {}) {
+async function callAI(prompt, { json = true, system = SYSTEM_PROMPT, files } = {}) {
   const { data: { session } } = await sb.auth.getSession();
   const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY },
-    body: JSON.stringify({ prompt, system, json }),
+    body: JSON.stringify({ prompt, system, json, files }),
   });
   const out = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -241,6 +241,22 @@ async function callAI(prompt, { json = true, system = SYSTEM_PROMPT } = {}) {
   const clean = out.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
   try { return JSON.parse(clean); } catch { throw new Error("AI ตอบไม่เป็น JSON ลองกดอีกครั้ง"); }
 }
+
+// ---------- reading images / PDFs ----------
+async function fileToPart(file) {
+  const b64 = (buf) => { let s = ""; const u = new Uint8Array(buf); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+  if (file.type === "application/pdf") { if (file.size > 15e6) throw new Error(`${file.name} ใหญ่เกิน 15MB`); return { mime: "application/pdf", data: b64(await file.arrayBuffer()) }; }
+  try {
+    const bmp = await createImageBitmap(file); const max = 2000, k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.88));
+    return { mime: "image/jpeg", data: b64(await blob.arrayBuffer()) };
+  } catch { if (file.size > 15e6) throw new Error(`${file.name} ใหญ่เกิน 15MB`); return { mime: file.type || "image/jpeg", data: b64(await file.arrayBuffer()) }; }
+}
+const normCode = (c) => String(c ?? "").replace(/[๐-๙]/g, (d) => "๐๑๒๓๔๕๖๗๘๙".indexOf(d)).replace(/\s+/g, "").replace(/^([ก-ฮ])\.?/, "$1");
+function matchCodes(list, valid) { const m = new Map(valid.map((i) => [normCode(i.code), i.code])); const ok = [], bad = []; (list ?? []).forEach((c) => { const v = m.get(normCode(c)); v ? ok.includes(v) || ok.push(v) : bad.push(String(c)); }); return { ok, bad }; }
+let READ = null;
 
 // =====================================================================
 // TAB 1 — school curriculum structure
@@ -342,6 +358,15 @@ function render2() {
   }
   renderT2Edit();
 }
+function readPreview() {
+  const r = READ, uh = r.rows.reduce((a, x) => a + num(x.hours), 0), sw = r.rows.reduce((a, x) => a + num(x.score_weight), 0), np = r.rows.reduce((a, x) => a + (x.plans?.length ?? 0), 0);
+  const bad = r.rows.flatMap((x) => x.bad ?? []);
+  return `<div class="check"><div class="stat ${uh === S.course.total_hours ? "ok" : "bad"}"><span class="muted small">ชั่วโมงรวม</span><b>${uh}/${S.course.total_hours}</b></div><div class="stat ${sw === 100 ? "ok" : "bad"}"><span class="muted small">คะแนนรวม</span><b>${sw}/100</b></div><div class="stat ${bad.length ? "bad" : "ok"}"><span class="muted small">ตัวชี้วัดที่จับคู่ไม่ได้</span><b>${bad.length}</b></div></div>
+  ${r.notes ? `<p class="small">📝 ${esc(r.notes)}</p>` : ""}
+  <div class="tablewrap"><table><tr><th>#</th><th>ภาค</th><th>หน่วย/สอบ</th><th>ตัวชี้วัด</th><th>ชม.</th><th>คะแนน</th>${r.withPlans ? "<th>หัวข้อแผน</th>" : ""}</tr>${r.rows.map((x, i) => `<tr><td>${i + 1}</td><td>${x.semester ?? ""}</td><td>${esc(x.name)}${x.kind === "exam" ? " (สอบ)" : ""}</td><td class="small">${x.indicator_codes.map(esc).join("<br>")}${x.bad?.length ? `<br><span style="color:var(--red)">ไม่พบ: ${x.bad.map(esc).join(", ")}</span>` : ""}</td><td>${x.hours}</td><td>${x.score_weight}</td>${r.withPlans ? `<td class="small">${(x.plans ?? []).map((p, k) => `${k + 1}. ${esc(p.title)} (${p.hours} ชม.)`).join("<br>")}</td>` : ""}</tr>`).join("")}</table></div>
+  <p class="small">${r.rows.filter((x) => x.kind === "unit").length} หน่วย${r.withPlans ? ` · ${np} หัวข้อแผน` : ""} — ตรวจแล้วกดใช้ (แก้ไขรายละเอียดต่อได้ด้านล่าง)</p>
+  <div class="row"><button class="btn primary" data-act="read-apply">ใช้โครงสร้างนี้</button><button class="btn" data-act="read-clear">ทิ้ง</button></div>`;
+}
 async function renderT2Edit() {
   const box = $("#t2edit"); if (!box || !S.course) { if (box) box.innerHTML = ""; return; }
   const inds = await courseIndicators();
@@ -351,7 +376,12 @@ async function renderT2Edit() {
   const used = new Set(S.rows.flatMap((r) => r.indicator_codes));
   const missing = inds.filter((i) => !used.has(i.code));
   const stat = (id, label, val, ok) => `<div class="stat ${ok ? "ok" : "bad"}" id="${id}"><span class="muted small">${label}</span><b>${val}</b></div>`;
-  box.innerHTML = `<div class="card accent">
+  box.innerHTML = `<details class="card" data-dk2="read" ${READ ? "open" : ""}><summary><b>📷 อ่านโครงสร้างจากภาพ/ไฟล์</b> <span class="muted small">— มีโครงสร้างรายวิชา กำหนดการสอน หรือตารางสอนอยู่แล้ว ถ่ายรูปหรือแนบ PDF ให้ AI ถอดให้</span></summary>
+    <p class="muted small">แนบได้หลายรูป (สูงสุด 10) เช่น หน้าโครงสร้างรายวิชาทุกหน้า หรือตารางสอนรายสัปดาห์ ระบบจับคู่ตัวชี้วัดกับรหัสจริงในฐานข้อมูลเท่านั้น</p>
+    <input type="file" id="readFiles" accept="image/*,application/pdf" multiple>
+    <label style="flex-direction:row;gap:6px;color:var(--text);margin-top:6px"><input type="checkbox" id="readPlans" checked> สร้างหน่วยการเรียนรู้และหัวข้อแผนรายคาบให้ด้วย (ไปเขียนแผนต่อได้เลย)</label>
+    <div class="row" style="margin-top:8px"><button class="btn primary" data-act="read-run">ให้ AI อ่าน</button></div><div id="readOut" style="margin-top:8px">${READ ? readPreview() : ""}</div></details>
+  <div class="card accent">
     <div class="row spread"><h3>${esc(S.course.course_code ?? "")} ${esc(S.course.course_name)} — ${total} ชั่วโมง</h3>
     <div class="row"><button class="btn small accent" data-act="t2-ai">ให้ AI ร่างหน่วย</button><button class="btn small" data-act="t2-add">+ เพิ่มหน่วย</button><button class="btn small" data-act="t2-addexam">+ เพิ่มสอบ</button></div></div>
     <div class="check">${stat("stH", "ชั่วโมงรวม", `${uh}/${total}`, uh === total)}${stat("stW", "คะแนนรวม", `${uw}/100`, uw === 100)}${stat("stM", "ตัวชี้วัดที่ยังไม่ถูกใช้", missing.length, missing.length === 0)}</div>
@@ -1171,6 +1201,42 @@ Object.assign(actions, {
     bkSave(); renderBook();
   }),
   "bk-doc": (b) => busy(b, bkDoc),
+  "read-run": (b) => busy(b, async () => {
+    const fs = [...($("#readFiles")?.files ?? [])]; if (!fs.length) throw new Error("เลือกรูปหรือไฟล์ PDF ก่อน"); if (fs.length > 10) throw new Error("ไม่เกิน 10 ไฟล์");
+    const withPlans = $("#readPlans")?.checked ?? true, c = S.course, inds = await courseIndicators();
+    if (!inds.length) throw new Error("ยังไม่มีตัวชี้วัดของวิชา/ชั้นนี้ในระบบ นำเข้าที่แถบ 1 ก่อน");
+    toast("กำลังเตรียมไฟล์และให้ AI อ่าน อาจใช้เวลา 30–90 วินาที");
+    const files = []; for (const f of fs) files.push(await fileToPart(f));
+    const out = await callAI(promptReadStructure({ subject: subjName(c.subject_id), grade: c.grade, curriculum: c.curriculum_id, totalHours: c.total_hours, semesters: c.semester_count, indicators: inds, withPlans }), { files });
+    const rows = (out.rows ?? []).map((x) => { const kind = x.kind === "exam" ? "exam" : "unit"; const m = kind === "unit" ? matchCodes(x.indicator_codes, inds) : { ok: [], bad: [] };
+      return { kind, semester: num(x.semester) || 1, name: String(x.name ?? ""), indicator_codes: m.ok, bad: m.bad, hours: Math.round(num(x.hours)), score_weight: num(x.score_weight), plans: withPlans && kind === "unit" ? (x.plans ?? []).map((p) => ({ title: String(p.title ?? ""), hours: Math.max(1, Math.round(num(p.hours)) || 1) })).filter((p) => p.title) : [] }; });
+    if (!rows.length) throw new Error("AI อ่านไม่พบหน่วยการเรียนรู้ในภาพ ลองรูปที่ชัดขึ้น หรือถ่ายเฉพาะตาราง");
+    READ = { rows, notes: String(out.notes ?? ""), withPlans, course: out.course ?? {} }; renderT2Edit();
+  }),
+  "read-clear": () => { READ = null; renderT2Edit(); },
+  "read-apply": (b) => busy(b, async () => {
+    if (!READ) return; if (S.rows.length && !confirm("แทนที่แถวโครงสร้างเดิมทั้งหมดด้วยที่อ่านจากภาพ?")) return;
+    const c = S.course, rows = READ.rows.map((x, i) => ({ id: uid(), course_structure_id: c.id, seq: i + 1, kind: x.kind, semester: x.semester, name: x.name, indicator_codes: x.indicator_codes, hours: x.hours, score_weight: x.score_weight }));
+    must(await sb.from("course_structure_rows").delete().eq("course_structure_id", c.id));
+    if (rows.length) must(await sb.from("course_structure_rows").insert(rows));
+    if (READ.course?.code && !c.course_code) { must(await sb.from("course_structures").update({ course_code: READ.course.code }).eq("id", c.id)); c.course_code = READ.course.code; }
+    await loadRows(); let msg = "บันทึกโครงสร้างแล้ว";
+    if (READ.withPlans) {
+      await loadUnits();
+      if (S.units.length) msg += " (รายวิชานี้มีหน่วยอยู่แล้ว จึงไม่สร้างหน่วย/แผนซ้ำ ถ้าต้องการให้ลบหน่วยเดิมที่แถบ 3 ก่อน)";
+      else {
+        const urows = rows.filter((r) => r.kind === "unit"); let np = 0;
+        for (let i = 0; i < urows.length; i++) {
+          const r = urows[i], src = READ.rows[READ.rows.indexOf(READ.rows.filter((x) => x.kind === "unit")[i])];
+          const u = must(await sb.from("units").insert({ course_structure_id: c.id, source_row_id: r.id, seq: i + 1, semester: r.semester, name: r.name, indicator_codes: r.indicator_codes, hours: Math.max(1, r.hours), score_weight: r.score_weight }).select().single());
+          const ps = (src?.plans ?? []).map((p, k) => ({ unit_id: u.id, seq: k + 1, title: p.title, hours: p.hours, indicator_codes: r.indicator_codes, sections: emptySections() }));
+          if (ps.length) { must(await sb.from("lesson_plans").insert(ps)); np += ps.length; }
+        }
+        await loadUnits(); msg += ` · สร้าง ${urows.length} หน่วย ${np} หัวข้อแผน ไปเขียนแผนที่แถบ 5 ได้เลย`;
+      }
+    }
+    READ = null; toast(msg, "ok"); renderT2Edit();
+  }),
   "bk-tt-add": () => { BK.book.data.time_table.push({ name: "แถวใหม่", h: [0, 0, 0, 0, 0, 0] }); bkSave(); renderBook(); },
   "bk-tt-del": (b) => { BK.book.data.time_table.splice(Number(b.dataset.i), 1); bkSave(); renderBook(); },
   "bk-tt-reset": () => { if (!confirm("คืนค่าตารางเวลาเรียนเป็นค่าเริ่มต้น?")) return; BK.book.data.time_table = DEF_TT(); bkSave(); renderBook(); },
