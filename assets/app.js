@@ -615,6 +615,29 @@ async function render6() {
 }
 async function autosavePlan() { try { if (S.plan && $("#pTitle")) { collectPlan(); await savePlan(); } } catch (e) { toast("บันทึกอัตโนมัติไม่สำเร็จ: " + e.message, "err"); } }
 async function stepPlan(d) { await autosavePlan(); const i = S.plans.findIndex((p) => p.id === S.plan?.id) + d; if (S.plans[i]) { S.plan = S.plans[i]; await render5(); window.scrollTo?.(0, 0); } }
+function wsToText(ws) {
+  return (ws.instructions ? `คำชี้แจง: ${ws.instructions}\n` : "") + (ws.questions ?? []).map((q, i) => {
+    let t = `${i + 1}. ${q.q}`;
+    if (q.type === "choice") t += "\n" + (q.options ?? []).map((o, k) => `   ${"กขคง"[k] ?? k + 1}. ${o}`).join("\n");
+    else if (q.type === "tf") t += "\n   ☐ ถูก   ☐ ผิด";
+    else if (q.type === "draw") t += "\n   (วาดภาพในกรอบด้านล่าง)\n.........................................................................................";
+    else if (q.type !== "fill") t += "\n" + Array.from({ length: q.lines ?? 2 }, () => "ตอบ: ......................................................................................").join("\n");
+    return t;
+  }).join("\n\n");
+}
+const wsKey = (ws) => (ws.questions ?? []).map((q, i) => `${i + 1}. ${q.answer ?? "-"}`).join("\n");
+const wsThemeName = (a) => ({ blue: "ฟ้า", pink: "ชมพู", green: "เขียว", orange: "ส้ม", purple: "ม่วง" })[a.theme] ?? "ฟ้า";
+function wsPanel(a, i) {
+  const prompt = promptWorksheetImage(a.ws, { theme: wsThemeName(a), grade: S.course?.grade ?? "", sub: a.sub ?? "" });
+  return `<div class="card" style="padding:10px;background:var(--panel2)"><b class="small">พร้อมใช้งาน</b>
+    <label>คำสั่งสร้างรูปใบงาน (วางใน ChatGPT)<textarea id="wsPr${i}" rows="5" readonly>${esc(prompt)}</textarea></label>
+    <div class="row"><button type="button" class="btn small primary" data-act="copy-text" data-t="wsPr${i}">📋 คัดลอกคำสั่ง</button>
+      <button type="button" class="btn small" data-act="t4-ws-card" data-i="${i}">🎨 วาดรูปแบบการ์ดให้เลย</button>
+      <button type="button" class="btn small" data-act="t4-ws-gem" data-i="${i}">🖼 สร้างรูปด้วย Gemini</button></div>
+    <label style="margin-top:8px">เฉลยใบงาน (สำหรับครู)<textarea id="wsKey${i}" rows="5" readonly>${esc(wsKey(a.ws))}</textarea></label>
+    <div class="row"><button type="button" class="btn small primary" data-act="copy-text" data-t="wsKey${i}">📋 คัดลอกเฉลย</button>
+      <button type="button" class="btn small" data-act="t4-ws-key" data-i="${i}">＋ ใส่เฉลยเป็นเอกสารแนบท้ายแผน</button></div></div>`;
+}
 async function renderPlanEditor() {
   const box = $("#t4edit"); if (!box) return;
   if (!S.plan) { box.innerHTML = '<div class="card muted">เลือกหรือเพิ่มแผนทางซ้าย</div>'; return; }
@@ -657,11 +680,12 @@ async function renderPlanEditor() {
       ${sec.assessment.map((a, i) => `<tr><td><input data-p="assessment.${i}.item" value="${esc(a.item)}"></td><td><textarea data-p="assessment.${i}.method" rows="2">${esc(a.method)}</textarea></td><td><textarea data-p="assessment.${i}.tool" rows="2">${esc(a.tool)}</textarea></td><td><textarea data-p="assessment.${i}.criteria" rows="2">${esc(a.criteria)}</textarea></td><td><button class="btn small danger" data-act="t4-as-del" data-i="${i}">✕</button></td></tr>`).join("")}</table></div><button class="btn small" data-act="t4-as-add">+ เพิ่มรายการประเมิน</button></div></details>
     <details class="sec"><summary>13. เอกสารแนบ (ใบงาน / เกณฑ์รูบริก) <span class="muted small">— ต่อท้ายไฟล์ Word</span></summary><div class="body">
       ${(sec.attachments ?? []).map((a, i) => `<div class="card" style="padding:10px"><label>ชื่อเอกสาร<input data-p="attachments.${i}.title" value="${esc(a.title)}"></label><label>เนื้อหา<textarea data-p="attachments.${i}.body" rows="8">${esc(a.body)}</textarea></label>
+        ${a.ws ? wsPanel(a, i) : ""}
         <div class="small muted" style="margin-top:6px">🖼 รูปใบงาน/รูปประกอบ (เช่น รูปที่ ChatGPT สร้าง) — จะแทรกท้ายเนื้อหาเต็มความกว้างหน้ากระดาษ</div>
         <div class="row">${(a.images ?? []).map((m, k) => `<div style="position:relative"><img src="${m.data}" alt="" style="height:90px;border:1px solid var(--line);border-radius:6px"><button type="button" class="btn small danger" data-act="t4-att-imgdel" data-i="${i}" data-k="${k}" style="position:absolute;top:2px;right:2px;padding:0 6px">×</button></div>`).join("")}</div>
         <input type="file" accept="image/*" multiple data-attimg="${i}">
         <button class="btn small danger" data-act="t4-att-del" data-i="${i}">ลบเอกสารนี้</button></div>`).join("") || '<div class="muted">ยังไม่มีเอกสารแนบ</div>'}
-      <div class="card" style="padding:10px;border-style:dashed"><b class="small">🎨 ให้ AI สร้างใบงานเป็นรูปสวย ๆ ใส่ใน Word</b><div class="row" style="margin-top:6px"><label class="small" style="flex-direction:row;gap:6px;align-items:center">จำนวนข้อ<input type="number" id="wsN" value="7" min="3" max="12" style="width:70px"></label><label class="small" style="flex-direction:row;gap:6px;align-items:center">แบบ<select id="wsMode" style="width:auto"><option value="img">รูปจาก AI (Gemini วาดทั้งใบ)</option><option value="card">การ์ดสะอาด (ไทยถูก 100%)</option></select></label><label class="small" style="flex-direction:row;gap:6px;align-items:center">สี<select id="wsTheme" style="width:auto"><option value="blue">ฟ้า</option><option value="pink">ชมพู</option><option value="green">เขียว</option><option value="orange">ส้ม</option><option value="purple">ม่วง</option></select></label><input id="wsExtra" placeholder="ข้อความเพิ่มเติม (ถ้ามี) เช่น เน้นข้อวาดภาพ" style="flex:1;min-width:180px"><button class="btn small primary" data-act="t4-ws">🎨 สร้างใบงาน</button><button class="btn small" data-act="t4-ws-prompt">📋 คัดลอกคำสั่งไปวางใน ChatGPT</button></div></div>
+      <div class="card" style="padding:10px;border-style:dashed"><b class="small">🧾 สร้างใบงาน (ข้อความ + คำสั่งสร้างรูป + เฉลย)</b><div class="row" style="margin-top:6px"><label class="small" style="flex-direction:row;gap:6px;align-items:center">จำนวนข้อ<input type="number" id="wsN" value="7" min="3" max="12" style="width:70px"></label><label class="small" style="flex-direction:row;gap:6px;align-items:center">สี<select id="wsTheme" style="width:auto"><option value="blue">ฟ้า</option><option value="pink">ชมพู</option><option value="green">เขียว</option><option value="orange">ส้ม</option><option value="purple">ม่วง</option></select></label><input id="wsExtra" placeholder="ข้อความเพิ่มเติม (ถ้ามี) เช่น เน้นข้อวาดภาพ" style="flex:1;min-width:180px"><button class="btn small primary" data-act="t4-ws">✨ สร้างใบงาน</button></div></div>
       <div class="row"><button class="btn small" data-act="t4-att-add">+ เพิ่มเอกสารแนบ</button><button class="btn small accent" data-act="t4-att-ai">✨ AI ร่างใบงาน + รูบริก</button></div></div></details>
     <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t4-save">บันทึกแผนนี้</button><button class="btn" data-act="t4-save-next">บันทึกและไปแผนถัดไป →</button></div>
   </div>`;
@@ -1149,37 +1173,32 @@ const actions = {
   }),
   "t4-as-add": () => { collectPlan(); S.plan.sections.assessment.push({ item: "รายการใหม่", method: "", tool: "", criteria: "" }); renderPlanEditor(); },
   "t4-as-del": (b) => { collectPlan(); S.plan.sections.assessment.splice(Number(b.dataset.i), 1); renderPlanEditor(); },
-  "t4-ws-prompt": (b) => busy(b, async () => {
-    collectPlan(); const all = await courseIndicators(), c = S.course, p = S.plan;
-    const count = Math.max(3, Math.min(12, num($("#wsN")?.value) || 7)), theme = $("#wsTheme")?.value || "blue";
-    toast("AI กำลังออกแบบข้อคำถาม...");
-    const ws = await callAI(promptWorksheet({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: p, indicators: all.filter((i) => p.indicator_codes.includes(i.code)), count, extra: $("#wsExtra")?.value }));
-    if (!Array.isArray(ws.questions) || !ws.questions.length) throw new Error("AI ไม่ได้ส่งข้อคำถามมา ลองใหม่อีกครั้ง");
-    const m = await import("./worksheet.js"), sub = `${subjName(c.subject_id)} ป.${c.grade} · หน่วยที่ ${S.unit.seq} ${S.unit.name}`;
-    const txt = promptWorksheetImage(ws, { theme: m.THEMES[theme]?.name ?? "ฟ้า", grade: c.grade, sub });
-    let copied = false; try { await navigator.clipboard.writeText(txt); copied = true; } catch {}
-    openModal(`<h3>คำสั่งสำหรับ ChatGPT</h3><p class="small">${copied ? "คัดลอกแล้ว — " : "คัดลอกข้อความด้านล่างแล้ว "}ไปวางใน ChatGPT เพื่อสร้างรูป จากนั้นบันทึกรูปแล้วแนบที่ช่อง "รูปใบงาน/รูปประกอบ"</p><textarea rows="12" readonly style="width:100%">${esc(txt)}</textarea><div class="row" style="margin-top:10px"><button class="btn primary" id="mCancel">ปิด</button></div>`);
-    $("#mCancel").onclick = closeModal;
-  }),
   "t4-ws": (b) => busy(b, async () => {
     collectPlan(); const all = await courseIndicators(), c = S.course, p = S.plan;
     const count = Math.max(3, Math.min(12, num($("#wsN")?.value) || 7)), theme = $("#wsTheme")?.value || "blue";
-    toast("AI กำลังออกแบบข้อคำถาม...");
+    toast("AI กำลังออกแบบใบงาน...");
     const ws = await callAI(promptWorksheet({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: p, indicators: all.filter((i) => p.indicator_codes.includes(i.code)), count, extra: $("#wsExtra")?.value }));
     if (!Array.isArray(ws.questions) || !ws.questions.length) throw new Error("AI ไม่ได้ส่งข้อคำถามมา ลองใหม่อีกครั้ง");
-    const m = await import("./worksheet.js"), sub = `${subjName(c.subject_id)} ป.${c.grade} · หน่วยที่ ${S.unit.seq} ${S.unit.name}`;
-    let images;
-    if (($("#wsMode")?.value ?? "img") === "img") {
-      toast("Gemini กำลังวาดรูปใบงาน อาจใช้เวลา 20-60 วินาที...");
-      const blob = await callImage(promptWorksheetImage(ws, { theme: m.THEMES[theme]?.name ?? "ฟ้า", grade: c.grade, sub }));
-      images = [await imgToData(blob, 1800)];
-    } else images = await m.renderWorksheet(ws, { theme, meta: { sub } });
-    (p.sections.attachments ??= []).push({ title: String(ws.title || "ใบงาน " + p.title), body: "", images, ws });
-    const key = ws.questions.map((q, i) => `${i + 1}. ${q.answer ?? "-"}`).join("\n");
-    p.sections.attachments.push({ title: "เฉลย " + String(ws.title || p.title), body: key });
-    await savePlan(); renderPlanEditor(); toast("สร้างใบงานเป็นรูปแล้ว (มีเฉลยแยกให้ด้วย)", "ok");
+    (p.sections.attachments ??= []).push({ title: String(ws.title || "ใบงาน " + p.title), body: wsToText(ws), ws, theme, sub: `${subjName(c.subject_id)} ป.${c.grade} · หน่วยที่ ${S.unit.seq} ${S.unit.name}`, images: [] });
+    await savePlan(); renderPlanEditor(); toast("สร้างใบงานแล้ว — ด้านล่างมีคำสั่งสร้างรูปและเฉลยให้คัดลอก", "ok");
   }),
-  "t4-att-add": () => { collectPlan(); (S.plan.sections.attachments ??= []).push({ title: "ใบงาน", body: "" }); renderPlanEditor(); },
+  "copy-text": async (b) => { const t = document.getElementById(b.dataset.t); if (!t) return; try { await navigator.clipboard.writeText(t.value); } catch { t.select(); document.execCommand?.("copy"); } toast("คัดลอกแล้ว", "ok"); },
+  "t4-ws-card": (b) => busy(b, async () => {
+    collectPlan(); const a = S.plan.sections.attachments[Number(b.dataset.i)], m = await import("./worksheet.js");
+    a.images = await m.renderWorksheet(a.ws, { theme: a.theme, meta: { sub: a.sub } }); a.body = "";
+    await savePlan(); renderPlanEditor(); toast("วาดรูปใบงานแล้ว", "ok");
+  }),
+  "t4-ws-gem": (b) => busy(b, async () => {
+    collectPlan(); const a = S.plan.sections.attachments[Number(b.dataset.i)]; toast("Gemini กำลังวาดรูปใบงาน อาจใช้เวลา 20-60 วินาที...");
+    const blob = await callImage(promptWorksheetImage(a.ws, { theme: wsThemeName(a), grade: S.course.grade, sub: a.sub }));
+    a.images = [await imgToData(blob, 1800)]; a.body = "";
+    await savePlan(); renderPlanEditor(); toast("สร้างรูปใบงานแล้ว ตรวจคำไทยในรูปก่อนใช้", "ok");
+  }),
+  "t4-ws-key": (b) => busy(b, async () => {
+    collectPlan(); const a = S.plan.sections.attachments[Number(b.dataset.i)];
+    S.plan.sections.attachments.push({ title: "เฉลย " + a.title, body: wsKey(a.ws) });
+    await savePlan(); renderPlanEditor(); toast("เพิ่มเฉลยเป็นเอกสารแนบแล้ว", "ok");
+  }),
   "t4-att-imgdel": (b) => { collectPlan(); S.plan.sections.attachments[Number(b.dataset.i)].images.splice(Number(b.dataset.k), 1); renderPlanEditor(); },
   "t4-att-del": (b) => { collectPlan(); S.plan.sections.attachments.splice(Number(b.dataset.i), 1); renderPlanEditor(); },
   "t4-att-ai": (b) => busy(b, async () => {
