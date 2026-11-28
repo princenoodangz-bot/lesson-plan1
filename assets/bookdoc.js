@@ -80,7 +80,7 @@ export async function buildBookDoc(b) {
       stdsOf(n).forEach((s) => {
         const all = indOf(g, s.standard_code); if (!all.length) return;
         rows.push([{ span: true, t: `มาตรฐาน ${s.standard_code} ${s.description ?? ""}` }]);
-        all.forEach((i) => rows.push([`ป.${g}`, `${i.code}\n${i.description}`, b.grades[g].core?.[i.code] ?? b.grades[g].core?.[i.code?.replace(/\s+/g, " ")] ?? "", "-"]));
+        all.forEach((i) => rows.push([`ป.${g}`, `${i.code}\n${i.description}`, b.grades[g].core?.[i.code] ?? "", b.grades[g].local?.[i.code] || "-"]));
       });
       if (rows.length) { kids.push(h3(`สาระที่ ${n} ${strandName(n)}`)); kids.push(table([1.4, 6.2, 6.2, 2.8], ["ชั้น", "ตัวชี้วัด", "สาระการเรียนรู้แกนกลาง", "สาระการเรียนรู้ท้องถิ่น"], rows, { center: [0] })); kids.push(sp()); }
     });

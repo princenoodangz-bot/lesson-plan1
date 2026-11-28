@@ -150,35 +150,38 @@ async function loadInds(curriculum, subject, grade) {
 async function loadStds(curriculum, subject) {
   const [a, b] = await Promise.all([
     sb.from("standards").select("standard_code,strand_no,strand_name,description").eq("curriculum_id", curriculum).eq("subject_id", subject),
-    sb.from("user_standards").select("standard_code,description").eq("curriculum_id", curriculum).eq("subject_id", subject),
+    sb.from("user_standards").select("standard_code,description,strand_no,strand_name").eq("curriculum_id", curriculum).eq("subject_id", subject),
   ]);
-  const m = new Map(must(a).map((x) => [x.standard_code, x])); must(b).forEach((x) => m.set(x.standard_code, { ...m.get(x.standard_code), ...x }));
+  const m = new Map(must(a).map((x) => [x.standard_code, x])); must(b).forEach((x) => { const o = m.get(x.standard_code) ?? {}; m.set(x.standard_code, { ...o, ...x, strand_no: x.strand_no ?? o.strand_no, strand_name: x.strand_name || o.strand_name }); });
   return [...m.values()];
 }
 // parse pasted curriculum text into standards + indicators for one grade
 function parseCurriculumText(text, grade) {
   const T = "๐๑๒๓๔๕๖๗๘๙";
   const lines = String(text).replace(/[๐-๙]/g, (d) => T.indexOf(d)).replace(/[\u200b\u00a0]/g, " ").split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
-  const stds = new Map(), inds = []; let curStd = null, last = null;
+  const stds = new Map(), strandOf = new Map(), inds = []; let curStd = null, last = null, curStrand = null;
+  const reStrand = /^สาระที่\s*(\d+)\s*(.*)$/;
   const reStd = /^มาตรฐาน(?:การเรียนรู้)?(?:\s*ที่)?\s*([ก-ฮ])\s*(\d+)\s*\.\s*(\d+)\s*[:\-–]?\s*(.*)$/;
   const reInd = /^(?:([ก-ฮ])\s*(\d+)\s*\.\s*(\d+)\s+)?ป\.?\s*(\d)\s*\/\s*(\d+)\s*[:\-–.]?\s*(.*)$/;
   for (const l of lines) {
-    if (/^(ตัวชี้วัด|ผลการเรียนรู้|ชั้น|สาระที่\s*\d+.*|สาระการเรียนรู้แกนกลาง)$/.test(l)) { last = last?.code ? null : last; continue; }
+    const sm = l.match(reStrand); if (sm) { curStrand = { no: sm[1], name: sm[2].trim() }; last = null; continue; }
+    if (/^(ตัวชี้วัด|ผลการเรียนรู้|ชั้น|สาระการเรียนรู้แกนกลาง)$/.test(l)) { last = last?.code ? null : last; continue; }
     let m = l.match(reStd);
-    if (m) { curStd = `${m[1]} ${m[2]}.${m[3]}`; if (!stds.has(curStd)) stds.set(curStd, m[4]); last = { std: curStd }; continue; }
+    if (m) { curStd = `${m[1]} ${m[2]}.${m[3]}`; if (!stds.has(curStd)) stds.set(curStd, m[4]); strandOf.set(curStd, curStrand ?? { no: m[2], name: "" }); last = { std: curStd }; continue; }
     m = l.match(reInd);
     if (m) {
       const std = m[1] ? `${m[1]} ${m[2]}.${m[3]}` : curStd;
-      if (Number(m[4]) !== grade || !std) { last = null; continue; }
+      if ((grade && Number(m[4]) !== grade) || !std) { last = null; continue; }
+      const gr = Number(m[4]);
       let d = m[6], kind = null; const k = d.match(/\((ระหว่างทาง|ปลายทาง)\)\s*$/); if (k) { kind = k[1]; d = d.replace(k[0], "").trim(); }
-      last = { code: `${std} ป.${grade}/${m[5]}`, standard_code: std, description: d, kind }; inds.push(last); continue;
+      last = { code: `${std} ป.${gr}/${m[5]}`, grade: gr, standard_code: std, description: d, kind }; inds.push(last); continue;
     }
     if (last?.code) last.description = (last.description + " " + l).trim();
     else if (last?.std && stds.get(last.std) !== undefined) stds.set(last.std, (stds.get(last.std) + " " + l).trim());
   }
   inds.forEach((i) => { const k = i.description.match(/\((ระหว่างทาง|ปลายทาง)\)\s*$/); if (k) { i.kind = k[1]; i.description = i.description.replace(k[0], "").trim(); } });
   const seen = new Set(), out = inds.filter((i) => !seen.has(i.code) && seen.add(i.code));
-  return { standards: [...stds].map(([standard_code, description]) => ({ standard_code, description })), indicators: out };
+  return { standards: [...stds].map(([standard_code, description]) => ({ standard_code, description, strand_no: strandOf.get(standard_code)?.no ?? null, strand_name: strandOf.get(standard_code)?.name || null })), indicators: out };
 }
 let IMP = null;
 async function indicatorsFor(cs) {
@@ -262,6 +265,7 @@ function render1() {
   <details class="card"><summary><b>นำเข้าตัวชี้วัดเอง</b> <span class="muted small">— สำหรับวิชา/ชั้น/หลักสูตรที่ยังไม่มีในระบบ</span></summary>
     <p class="muted small">คัดลอกตัวชี้วัดจากเอกสารหลักสูตรทางการหรือเอกสารของโรงเรียน (เลือกวิชา หลักสูตร ชั้น ด้านบนก่อน) มาวาง ระบบอ่านบรรทัดรูปแบบ "มาตรฐาน พ 1.1 ..." และ "ป.5/1 ..." ให้ แล้วให้ตรวจก่อนบันทึก</p>
     <textarea id="impText" rows="8" placeholder="มาตรฐาน ท 1.1 ใช้กระบวนการอ่าน...&#10;ป.5/1 อ่านออกเสียงบทร้อยแก้ว..."></textarea>
+    <label style="flex-direction:row;gap:6px;color:var(--text);margin-top:6px"><input type="checkbox" id="impAll" checked> อ่านทุกชั้น ป.1–6 ในครั้งเดียว (ไม่ติ๊ก = เฉพาะชั้นที่เลือก) และอ่านบรรทัด "สาระที่ ..." เป็นชื่อสาระ</label>
     <div class="row" style="margin-top:8px"><button class="btn" data-act="imp-parse">แปลงและตรวจ</button><button class="btn primary" data-act="imp-save">บันทึกลงระบบ</button></div><div id="impPrev" class="small" style="margin-top:8px"></div></details>
   <div class="card"><h3>โครงสร้างหลักสูตรที่บันทึกไว้</h3><div id="t1list" class="list"></div></div>`;
   $("#t1s").value = T1.subject; $("#t1c").value = T1.curriculum; $("#t1g").value = T1.grade;
@@ -561,6 +565,7 @@ async function t9Draft(cx) {
 const t9Msg = (m) => { const e = $("#t9st"); if (e) e.textContent = m; };
 const t9Save = async (doc, name) => (await import("./export.js")).saveBlob(await (await import("./curdoc.js")).docBlob(doc), safeName(name) + ".docx");
 // ---------- tab 0: school curriculum book ----------
+const DEF_HOURS = { 1: [200, 200, 200, 160, 160, 160], 2: [200, 200, 200, 160, 160, 160], 3: [120, 120, 120, 120, 120, 120], 4: [120, 120, 120, 120, 120, 120], 5: [80, 80, 80, 80, 80, 80], 6: [80, 80, 80, 80, 80, 80], 7: [40, 40, 40, 40, 40, 40], 8: [40, 40, 40, 80, 80, 80] };
 const BK = { open: new Set(), subject: 5, curriculum: "2551r60", book: null, books: null, busy: false };
 const bkGet = (o, path) => path.split(".").reduce((a, k) => a?.[k], o);
 const bkSet = (o, path, v) => { const ks = path.split("."); const last = ks.pop(); const t = ks.reduce((a, k) => (a[k] ??= {}), o); t[last] = v; };
@@ -594,13 +599,14 @@ function renderBook() {
       <div class="grid" style="margin:8px 0"><label>รหัสวิชา<input data-bk="grades.${g}.code" value="${esc(x.code ?? "")}"></label><label>ชื่อรายวิชา<input data-bk="grades.${g}.name" value="${esc(x.name ?? "")}"></label><label>ชั่วโมง/ปี<input type="number" data-bk="grades.${g}.hours" value="${x.hours ?? 80}"></label></div>
       <div class="row" style="margin-bottom:8px"><button class="btn small" data-act="bk-use-course" data-g="${g}">ใช้โครงสร้างจากรายวิชาที่สร้างไว้ (แถบ 2)</button></div>
       <div class="card" style="padding:10px"><div class="row"><b>① สาระการเรียนรู้แกนกลาง</b><span class="muted small">ทำทีละสาระ</span></div><div class="row" style="margin-top:6px">${bkStrands().map((n) => `<button class="btn small" data-act="bk-ai-core" data-g="${g}" data-n="${n}">AI สาระที่ ${n}</button>`).join("") || '<span class="muted small">ไม่พบสาระ</span>'}</div>
-      <details style="margin-top:8px" data-dk="gc${g}"><summary>แก้ไขรายตัวชี้วัด (${Object.keys(x.core ?? {}).length})</summary>${Object.entries(x.core ?? {}).map(([c, v]) => `<label>${esc(c.replace(/‧/g, "."))}<textarea rows="2" data-bk="grades.${g}.core.${c}">${esc(v)}</textarea></label>`).join("") || '<div class="muted small">ยังไม่มี</div>'}</details></div>
+      <details style="margin-top:8px" data-dk="gc${g}"><summary>แก้ไขรายตัวชี้วัด (${Object.keys(x.core ?? {}).length})</summary>${Object.entries(x.core ?? {}).map(([c, v]) => `<label>${esc(c.replace(/‧/g, "."))} — สาระแกนกลาง<textarea rows="2" data-bk="grades.${g}.core.${c}">${esc(v)}</textarea></label><label class="small">สาระท้องถิ่น<textarea rows="1" data-bk="grades.${g}.local.${c}">${esc(x.local?.[c] ?? "")}</textarea></label>`).join("") || '<div class="muted small">ยังไม่มี</div>'}</details></div>
       <div class="card" style="padding:10px"><div class="row"><b>② โครงสร้างรายวิชา</b><button class="btn small" data-act="bk-ai-struct" data-g="${g}">AI ร่างหน่วย/ชั่วโมง/คะแนน</button></div>
       ${st.map((r, i) => `<div class="card" style="padding:8px"><div class="grid"><label>ชื่อหน่วย<input data-bk="grades.${g}.structure.${i}.name" value="${esc(r.name ?? "")}"></label><label>ตัวชี้วัด (คั่นด้วย ,)<input data-bkl="grades.${g}.structure.${i}.indicator_codes" value="${esc((r.indicator_codes ?? []).join(", "))}"></label><label>ชั่วโมง<input type="number" data-bk="grades.${g}.structure.${i}.hours" value="${r.hours ?? 0}"></label><label>คะแนน<input type="number" data-bk="grades.${g}.structure.${i}.score_weight" value="${r.score_weight ?? 0}"></label></div><label>เนื้อหา</label><textarea rows="2" data-bk="grades.${g}.structure.${i}.content">${esc(r.content ?? "")}</textarea></div>`).join("") || '<div class="muted small">ยังไม่มี</div>'}</div>
       <div class="card" style="padding:10px"><div class="row"><b>③ คำอธิบายรายวิชา</b><button class="btn small" data-act="bk-ai-desc" data-g="${g}">AI ร่างคำอธิบาย</button></div>${ta(`grades.${g}.desc`, 8)}</div>
       <label style="flex-direction:row;gap:6px;color:var(--text);margin-top:6px"><input type="checkbox" data-bk="reviewed.g${g}" ${d.reviewed?.["g" + g] ? "checked" : ""}> ตรวจชั้นนี้แล้ว</label>
       </details></details>`; }).join("");
-  ed.innerHTML = `<div class="card accent"><h3>${esc(b.title)}</h3><div class="row"><button class="btn accent" data-act="bk-doc">ดาวน์โหลด Word ทั้งเล่ม</button><button class="btn" data-act="bk-next">ไปรายวิชา → แถบ 2</button></div>
+  const noData = !(BK.stds ?? []).length;
+  ed.innerHTML = `${noData ? `<div class="card" style="border:2px solid var(--red)"><b>⚠ ยังไม่มีมาตรฐาน/ตัวชี้วัดของวิชานี้ในระบบ</b><p class="small">AI จะเขียนโดยไม่มีข้อมูลจริงอ้างอิง ไปแถบ 1 → "นำเข้าตัวชี้วัดเอง" วางมาตรฐานและตัวชี้วัด ป.1–6 จากเอกสารหลักสูตรก่อน แล้วกลับมากด AI ใหม่</p><button class="btn small" data-act="goto" data-tab="t1">ไปแถบ 1</button></div>` : ""}<div class="card accent"><h3>${esc(b.title)}</h3><div class="row"><button class="btn accent" data-act="bk-doc">ดาวน์โหลด Word ทั้งเล่ม</button><button class="btn" data-act="bk-next">ไปรายวิชา → แถบ 2</button></div>
     <div class="muted small" style="margin-top:6px">กด AI ทีละส่วน ตรวจแล้วติ๊ก "ตรวจแล้ว" ✔ = ตรวจแล้ว ✓ = มีเนื้อหา ○ = ยังว่าง</div><div class="muted small" id="bkst" style="margin-top:6px"></div></div>
     <h3>ส่วนหน้า/ท้ายเล่ม</h3>${texts}<h3>รายชั้น ป.1–6</h3>${gr}`;
   $$("#bkedit details[data-dk]").forEach((x) => { if (BK.open.has(x.dataset.dk)) x.open = true; });
@@ -617,6 +623,7 @@ async function bkCtx() {
 const bkMsg = (m) => { const e = $("#bkst"); if (e) e.textContent = m; };
 async function bkRetry(fn) { try { return await fn(); } catch (e) { await new Promise((r) => setTimeout(r, 2500)); return await fn(); } }
 async function bkAiText(k, c) {
+  if (!c.inds.length) throw new Error("ยังไม่มีตัวชี้วัดของวิชานี้ในระบบ นำเข้าที่แถบ 1 ก่อน");
   const b = BK.book, cn = S.curricula.find((x) => x.id === b.curriculum_id)?.name ?? b.curriculum_id;
   const out = await bkRetry(() => callAI(promptBookText(k, { school: S.settings?.school_name ?? "", subject: bkSub(), curriculum: cn, standards: c.stds, indicators: c.inds })));
   bkSet(b.data, "texts." + k, String(out.text ?? ""));
@@ -626,8 +633,8 @@ async function bkAiCore(g, n, c) {
   const b = BK.book, gd = (b.data.grades[g] ??= {}), codes = new Set((c.stds ?? []).filter((x) => bkStrandNo(x) === String(n)).map((x) => x.standard_code));
   const gi = bkGradeInds(g, c).filter((i) => codes.has(i.standard_code));
   if (!gi.length) throw new Error(`ไม่มีตัวชี้วัด ป.${g} ในสาระที่ ${n}`);
-  const o = await bkRetry(() => callAI(promptCore({ subject: bkSub(), grade: g, indicators: gi })));
-  gd.core ??= {}; gi.forEach((i) => { const v = o.core?.[i.code]; if (v) gd.core[i.code.replace(/\./g, "‧")] = String(v); });
+  const o = await bkRetry(() => callAI(promptCore({ subject: bkSub(), grade: g, indicators: gi, school: S.settings?.school_name ?? "" })));
+  gd.core ??= {}; gd.local ??= {}; gi.forEach((i) => { const k = i.code.replace(/\./g, "‧"), v = o.core?.[i.code], lv = o.local?.[i.code]; if (v) gd.core[k] = String(v); if (lv && !gd.local[k]) gd.local[k] = String(lv); });
 }
 async function bkAiStruct(g, c) {
   const b = BK.book, gd = (b.data.grades[g] ??= {}), gi = bkGradeInds(g, c);
@@ -648,7 +655,7 @@ async function bkRun(tasks) {
 }
 async function bkDoc() {
   const b = BK.book, d = b.data, c = await bkCtx(), m = await import("./bookdoc.js");
-  const grades = {}; for (let g = 1; g <= 6; g++) { const x = d.grades?.[g] ?? {}; grades[g] = { ...x, core: Object.fromEntries(Object.entries(x.core ?? {}).map(([k, v]) => [k.replace(/‧/g, "."), v])) }; }
+  const grades = {}; for (let g = 1; g <= 6; g++) { const x = d.grades?.[g] ?? {}; const fix = (o) => Object.fromEntries(Object.entries(o ?? {}).map(([k, v]) => [k.replace(/‧/g, "."), v])); grades[g] = { ...x, core: fix(x.core), local: fix(x.local) }; }
   const blob = await m.bookBlob({ thNum, school: S.settings?.school_name ?? "", year: S.settings?.academic_year ?? "", subject: bkSub(), curriculumName: S.curricula.find((x) => x.id === b.curriculum_id)?.name ?? b.curriculum_id, texts: d.texts ?? {}, grades, standards: c.stds, indicators: c.inds });
   (await import("./export.js")).saveBlob(blob, safeName(`เล่มหลักสูตร_${bkSub()}`) + ".docx");
 }
@@ -696,7 +703,7 @@ const t8Chosen = () => (T8.plans ?? []).filter((p) => T8.sel.has(p.id));
 function t8Download(blob, name) { return import("./export.js").then((m) => m.saveBlob(blob, name)); }
 function render7() {
   const st = S.settings ?? {};
-  $("#t5").innerHTML = `
+  $("#t7").innerHTML = `
   <div class="card accent"><h2>⚙ ตั้งค่า</h2>
     <div class="grid">
       <label>ชื่อโรงเรียน<input id="sSchool" value="${esc(st.school_name ?? "")}"></label>
@@ -733,14 +740,15 @@ const actions = {
 
   // ---- tab 1
   "imp-parse": () => {
-    IMP = parseCurriculumText($("#impText").value, T1.grade);
-    $("#impPrev").innerHTML = IMP.indicators.length ? `<p>พบมาตรฐาน ${IMP.standards.length} ข้อ ตัวชี้วัด ป.${T1.grade} จำนวน ${IMP.indicators.length} ข้อ — ตรวจรายการ:</p><div class="tablewrap"><table>${IMP.indicators.map((i) => `<tr><td style="white-space:nowrap">${esc(i.code)}</td><td>${esc(i.description)}</td></tr>`).join("")}</table></div>` : '<p class="muted">ไม่พบตัวชี้วัดของชั้นนี้ในข้อความ ตรวจว่ามีบรรทัดขึ้นต้นด้วย "ป.5/1" และมีบรรทัด "มาตรฐาน ..." และเลือกชั้นตรงกัน</p>';
+    const all = $("#impAll")?.checked; IMP = parseCurriculumText($("#impText").value, all ? 0 : T1.grade);
+    const byG = [1, 2, 3, 4, 5, 6].map((g) => [g, IMP.indicators.filter((i) => i.grade === g).length]).filter((x) => x[1]).map(([g, n]) => `ป.${g}: ${n}`).join(" · ");
+    $("#impPrev").innerHTML = IMP.indicators.length ? `<p>พบมาตรฐาน ${IMP.standards.length} ข้อ (สาระ ${new Set(IMP.standards.map((x) => x.strand_no)).size}) ตัวชี้วัด ${IMP.indicators.length} ข้อ (${byG}) — ตรวจรายการ:</p><div class="tablewrap"><table>${IMP.indicators.map((i) => `<tr><td style="white-space:nowrap">${esc(i.code)}</td><td>${esc(i.description)}</td></tr>`).join("")}</table></div>` : '<p class="muted">ไม่พบตัวชี้วัดของชั้นนี้ในข้อความ ตรวจว่ามีบรรทัดขึ้นต้นด้วย "ป.5/1" และมีบรรทัด "มาตรฐาน ..." และเลือกชั้นตรงกัน</p>';
   },
   "imp-save": (b) => busy(b, async () => {
     if (!IMP?.indicators.length) throw new Error("กด 'แปลงและตรวจ' ก่อน");
     const base = { owner_id: S.user.id, curriculum_id: T1.curriculum, subject_id: T1.subject };
-    const stdRows = IMP.standards.map((x) => ({ ...base, standard_code: x.standard_code, description: x.description }));
-    const indRows = IMP.indicators.map((i) => ({ ...base, grade: T1.grade, standard_code: i.standard_code, code: i.code, description: i.description, kind: i.kind }));
+    const stdRows = IMP.standards.map((x) => ({ ...base, standard_code: x.standard_code, description: x.description, strand_no: x.strand_no, strand_name: x.strand_name }));
+    const indRows = IMP.indicators.map((i) => ({ ...base, grade: i.grade, standard_code: i.standard_code, code: i.code, description: i.description, kind: i.kind }));
     if (stdRows.length) must(await sb.from("user_standards").upsert(stdRows, { onConflict: "owner_id,curriculum_id,subject_id,standard_code" }));
     must(await sb.from("user_indicators").upsert(indRows, { onConflict: "owner_id,curriculum_id,subject_id,grade,code" }));
     S.indCache = {}; IMP = null; $("#impPrev").innerHTML = ""; $("#impText").value = "";
@@ -1118,8 +1126,10 @@ Object.assign(actions, {
 
 Object.assign(actions, {
   "bk-new": (b) => busy(b, async () => {
-    const c = { stds: await loadStds(BK.curriculum, BK.subject) }; const ab = c.stds[0]?.standard_code?.split(" ")[0] ?? "";
-    const grades = {}; for (let g = 1; g <= 6; g++) grades[g] = { hours: 80, code: `${ab}1${g}101`, name: subjName(BK.subject), desc: "", structure: [], core: {} };
+    const c = { stds: await loadStds(BK.curriculum, BK.subject) };
+    let nInd = 0; for (let g = 1; g <= 6; g++) nInd += (await loadInds(BK.curriculum, BK.subject, g)).length;
+    if (!c.stds.length || !nInd) throw new Error(`ยังไม่มีมาตรฐาน/ตัวชี้วัดของ ${subjName(BK.subject)} (${BK.curriculum}) ในระบบ ไปแถบ 1 → "นำเข้าตัวชี้วัดเอง" วางจากเอกสารหลักสูตรก่อน`); const ab = c.stds[0]?.standard_code?.split(" ")[0] ?? "";
+    const grades = {}; for (let g = 1; g <= 6; g++) grades[g] = { hours: DEF_HOURS[BK.subject]?.[g - 1] ?? 80, code: `${ab}1${g}101`, name: subjName(BK.subject), desc: "", structure: [], core: {} };
     const row = must(await sb.from("curriculum_books").insert({ subject_id: BK.subject, curriculum_id: BK.curriculum, title: `เล่มหลักสูตร ${subjName(BK.subject)}`, data: { texts: {}, grades } }).select().single());
     BK.books.unshift(row); BK.book = row; render0();
   }),
