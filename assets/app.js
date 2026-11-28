@@ -2,7 +2,7 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 import {
   withMaterial, stripQA, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
-  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptWorksheetImage, promptWorksheetFromText, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
+  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptWorksheetImage, promptWorksheetFromText, promptMediaKit, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
 } from "./template.js";
 
 const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG;
@@ -734,6 +734,13 @@ function wsPanel(a, i) {
     <div class="row"><button type="button" class="btn small primary" data-act="copy-text" data-t="wsKey${i}">📋 คัดลอกเฉลย</button>
       <button type="button" class="btn small" data-act="t4-ws-key" data-i="${i}">＋ ใส่เฉลยเป็นเอกสารแนบท้ายแผน</button></div></div>`;
 }
+function mediaKitPanel(sec) {
+  const kit = sec.media_kit ?? []; if (!kit.length) return "";
+  return `<div class="card" style="padding:10px;background:var(--panel2);margin-top:8px"><b class="small">พร้อมสร้าง — คัดลอกคำสั่งไปวางใน ChatGPT / Gemini</b>${kit.map((k, i) => `<div style="margin-top:8px;border-top:1px dashed var(--line,#d9d0b8);padding-top:6px"><b>${i + 1}. ${esc(k.name)}</b> <span class="pill ok">${esc(k.type)}</span>
+    <label>คำสั่งสร้างสื่อ<textarea id="mkP${i}" rows="4" readonly>${esc(k.prompt)}</textarea></label>
+    <div class="row"><button type="button" class="btn small primary" data-act="copy-text" data-t="mkP${i}">📋 คัดลอกคำสั่ง</button></div>
+    ${k.content ? `<label>เนื้อหาพร้อมใช้<textarea id="mkC${i}" rows="5" readonly>${esc(k.content)}</textarea></label><div class="row"><button type="button" class="btn small" data-act="copy-text" data-t="mkC${i}">📋 คัดลอกเนื้อหา</button><button type="button" class="btn small" data-act="t4-media-att" data-i="${i}">＋ ใส่เป็นเอกสารแนบท้ายแผน</button></div>` : ""}</div>`).join("")}</div>`;
+}
 async function renderPlanEditor() {
   const box = $("#t4edit"); if (!box) return;
   if (!S.plan) { box.innerHTML = '<div class="card muted">เลือกหรือเพิ่มแผนทางซ้าย</div>'; return; }
@@ -770,7 +777,7 @@ async function renderPlanEditor() {
     <details class="sec"><summary>7. ${SECTIONS[6].title}</summary><div class="body">${SUFFICIENCY.map(([k, l]) => ta("sufficiency." + k, l, 2)).join("")}</div></details>
     <details class="sec"><summary>8. ${SECTIONS[7].title}</summary><div class="body"><b>3Rs</b>${chk("focus.r3", R3)}<b>8Cs</b>${chk("focus.c8", C8)}</div></details>
     <details class="sec"><summary>9. ${SECTIONS[8].title}</summary><div class="body">${PROCESS_STEPS.map((s, i) => ta("process." + i, s, 6)).join("")}</div></details>
-    <details class="sec"><summary>10. ${SECTIONS[9].title}</summary><div class="body">${ta("media", "สื่อการเรียนการสอน (หนึ่งบรรทัดต่อหนึ่งข้อ)", 3)}</div></details>
+    <details class="sec"><summary>10. ${SECTIONS[9].title}</summary><div class="body">${ta("media", "สื่อการเรียนการสอน (หนึ่งบรรทัดต่อหนึ่งข้อ)", 3)}<div class="row"><button type="button" class="btn small accent" data-act="t4-media-kit">📋 เตรียมคำสั่งสร้างสื่อทุกชิ้น (คัดลอกไปสร้าง)</button></div>${mediaKitPanel(sec)}</div></details>
     <details class="sec"><summary>11. ${SECTIONS[10].title}</summary><div class="body">${ta("resources.inside", "แหล่งเรียนรู้ภายในโรงเรียน", 2)}${ta("resources.outside", "แหล่งเรียนรู้ภายนอกห้องเรียน", 2)}${ta("resources.local", "ภูมิปัญญาท้องถิ่น", 2)}</div></details>
     <details class="sec"><summary>12. ${SECTIONS[11].title}</summary><div class="body"><div class="tablewrap"><table><tr><th>รายการประเมิน</th><th>วิธีการวัด</th><th>เครื่องมือวัด</th><th>เกณฑ์การประเมินผล</th><th></th></tr>
       ${sec.assessment.map((a, i) => `<tr><td><input data-p="assessment.${i}.item" value="${esc(a.item)}"></td><td><textarea data-p="assessment.${i}.method" rows="2">${esc(a.method)}</textarea></td><td><textarea data-p="assessment.${i}.tool" rows="2">${esc(a.tool)}</textarea></td><td><textarea data-p="assessment.${i}.criteria" rows="2">${esc(a.criteria)}</textarea></td><td><button class="btn small danger" data-act="t4-as-del" data-i="${i}">✕</button></td></tr>`).join("")}</table></div><button class="btn small" data-act="t4-as-add">+ เพิ่มรายการประเมิน</button></div></details>
@@ -1072,6 +1079,19 @@ async function checkKey(id) {
   KRES[id] = `<span style="color:${good ? "#2e7d32" : warn ? "var(--warn)" : "var(--red)"}"><b>${good ? "✓" : warn ? "!" : "✗"} ${esc(o.message || o.error || "ตรวจไม่สำเร็จ")}</b> <span class="muted">(${new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })})</span></span>`;
 }
 const actions = {
+  "t4-media-kit": (b) => busy(b, async () => {
+    collectPlan(); const c = S.course, all = await courseIndicators(), media = S.plan.sections.media;
+    if (!String(media ?? "").trim()) throw new Error("ช่องสื่อการเรียนการสอนยังว่าง ใส่รายการสื่อก่อน หรือกด AI เขียนหัวข้อนี้ใหม่");
+    const out = await callAI(promptMediaKit({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: S.plan, indicators: all.filter((i) => S.plan.indicator_codes.includes(i.code)), media }));
+    if (!Array.isArray(out.items) || !out.items.length) throw new Error("AI ตอบไม่ครบ ลองใหม่");
+    S.plan.sections.media_kit = out.items.map((x) => ({ name: String(x.name ?? ""), type: String(x.type ?? "อื่นๆ"), content: stripQA(x.content ?? ""), prompt: String(x.prompt ?? "") }));
+    await savePlan(); renderPlanEditor(); toast("เตรียมคำสั่งสร้างสื่อแล้ว เลื่อนดูใต้ช่องสื่อ", "ok");
+  }),
+  "t4-media-att": (b) => busy(b, async () => {
+    collectPlan(); const k = S.plan.sections.media_kit[Number(b.dataset.i)];
+    S.plan.sections.attachments.push({ title: k.name, body: k.content });
+    await savePlan(); renderPlanEditor(); toast("เพิ่มเป็นเอกสารแนบแล้ว", "ok");
+  }),
   "t1-attach": (b) => busy(b, async () => {
     const files = [...($("#t1file")?.files ?? [])]; if (!files.length) throw new Error("เลือกไฟล์ก่อน");
     const TH = "๐๑๒๓๔๕๖๗๘๙", dg = (x) => String(x ?? "").replace(/[๐-๙]/g, (d) => TH.indexOf(d));
@@ -1505,7 +1525,7 @@ function planFromOut0(out, prev, base, lines) {
     sufficiency: { ...base.sufficiency, ...out.sufficiency },
     resources: { inside: lines(out.resources?.inside), outside: lines(out.resources?.outside) || "-", local: lines(out.resources?.local) || "-" },
     focus: prev.focus ?? base.focus,
-    attachments: prev.attachments ?? [],
+    attachments: prev.attachments ?? [], media_kit: prev.media_kit ?? [],
     process: Array.from({ length: 5 }, (_, i) => String(out.process?.[i] ?? "")),
     content: lines(out.content), media: lines(out.media), traits: (out.traits ?? []).filter((t) => TRAITS.includes(t)),
     assessment: base.assessment.map((a, i) => ({ ...a, ...(out.assessment?.[i] ?? {}), item: a.item })),
