@@ -812,6 +812,9 @@ async function renderPlanEditor() {
     <details class="sec" ${(sec.media_kit ?? []).length ? "open" : ""}><summary>${14 + (sec.assessment ?? []).length}. พร้อมสร้างสื่อการสอน <span class="muted small">— คำสั่งคัดลอกไปสร้างสื่อ + แนบรูปที่ได้ต่อท้าย Word</span></summary><div class="body">
       <p class="muted small">ระบบอ่านรายการสื่อในข้อ 10 แล้วเตรียมคำสั่งให้ทีละชิ้น คัดลอกไปสร้างใน ChatGPT/Gemini แล้วนำรูปที่ได้มาแนบกลับที่นี่</p>
       <div class="row"><button type="button" class="btn small accent" data-act="t4-media-kit">📋 เตรียมคำสั่งสร้างสื่อทุกชิ้น (คัดลอกไปสร้าง)</button></div>${mediaKitPanel(sec)}</div></details>
+    <div class="card" style="padding:10px;margin-top:10px;background:var(--panel2)"><b>⬇ ดาวน์โหลดแผนนี้ (รวมเอกสารแนบทุกแผ่น)</b>
+      <div class="row" style="margin-top:6px"><button type="button" class="btn small primary" data-act="t4-export">📄 ดาวน์โหลด Word (.docx)</button><button type="button" class="btn small accent" data-act="t4-pdf">📕 ดาวน์โหลด PDF</button></div>
+      <div class="muted small">PDF: จะเปิดหน้าต่างพิมพ์ เลือก "บันทึกเป็น PDF" (iPad: กดปุ่มแชร์ → บันทึกลงไฟล์)</div></div>
     <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t4-save">บันทึกแผนนี้</button><button class="btn" data-act="t4-save-next">บันทึกและไปแผนถัดไป →</button></div>
   </div>`;
 }
@@ -1511,6 +1514,21 @@ const actions = {
   }),
   "t4-ai": (b) => busy(b, async () => { collectPlan(); await aiDraftPlan(S.plan); await savePlan(); toast("AI ร่างแผนแล้ว (ตรวจก่อนใช้จริง)", "ok"); renderPlanEditor(); }),
   "t4-export": (b) => busy(b, async () => { collectPlan(); await savePlan(); const m = await import("./export.js"); await m.exportPlans(await exportCtx(), [S.plan]); }),
+  "t4-pdf": (b) => busy(b, async () => {
+    collectPlan(); await savePlan(); const { planPreviewHtml } = await import("./preview.js"), ctx = await exportCtx();
+    const css = await fetch("assets/app.css").then((r) => r.text()).catch(() => "");
+    const html = await planPreviewHtml(ctx, S.plan);
+    const fr = document.createElement("iframe"); fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+    fr.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(S.plan.title ?? "แผน")}</title><style>${css}
+body{background:#fff!important;color:#000;margin:0}@page{size:A4;margin:1.5cm 1.75cm 1.5cm 3cm}
+.paper{box-shadow:none!important;border:0!important;padding:0!important;max-width:none!important;border-radius:0!important}
+.paper hr{border:0!important;margin:0!important;height:0;page-break-after:always;break-after:page}
+.paper table,.paper tr{page-break-inside:avoid}</style></head><body>${html}</body></html>`;
+    document.body.appendChild(fr);
+    await new Promise((res) => { fr.onload = res; setTimeout(res, 1500); });
+    await new Promise((r) => setTimeout(r, 400)); fr.contentWindow.focus(); fr.contentWindow.print();
+    setTimeout(() => fr.remove(), 60000); toast("เปิดหน้าต่างพิมพ์แล้ว เลือกบันทึกเป็น PDF", "ok");
+  }),
   "t4-export-unit": (b) => busy(b, async () => { const m = await import("./export.js"); await m.exportPlans(await exportCtx(), S.plans); }),
 
   // ---- tab 5
