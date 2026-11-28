@@ -204,7 +204,7 @@ function go(tab) {
   $$(".step").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   const c = S.course ? `${subjName(S.course.subject_id)} ป.${S.course.grade} · ${S.course.curriculum_id}` : S.cs ? `${subjName(S.cs.subject_id)} ป.${S.cs.grade} · ${S.cs.curriculum_id}` : "";
   $("#crumb").textContent = c;
-  ({ t1: render1, t2: render2, t3: render3, t4: render4, t5: render5, t6: render6, t7: render7, t8: render8, t9: render9, t0: render0 })[tab]();
+  ({ t10: render10, t1: render1, t2: render2, t3: render3, t4: render4, t5: render5, t6: render6, t7: render7, t8: render8, t9: render9, t0: render0 })[tab]();
 }
 $("#steps").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) go(b.dataset.tab); });
 
@@ -824,9 +824,43 @@ document.addEventListener("change", async (e) => {
 // ---------- tab 8: downloads ----------
 const T8 = { sel: new Set() };
 const safeName = (x) => String(x).replace(/[\\/:*?"<>|]/g, "_").trim();
+// =====================================================================
+// TAB 8 — indicator usage check
+// =====================================================================
+async function render10() {
+  const el = $("#t10");
+  if (!S.course) { el.innerHTML = `<div class="card accent"><h2>8 · ตรวจตัวชี้วัด</h2><p>เลือกรายวิชาที่แถบ 3 ก่อน</p><button class="btn" data-act="goto" data-tab="t2">ไปแถบ 3</button></div>`; return; }
+  el.innerHTML = `<div class="card accent"><h2>8 · ตรวจตัวชี้วัด</h2><p class="muted">กำลังนับ...</p></div>`;
+  const c = S.course, inds = await courseIndicators(), stds = await loadStds(c.curriculum_id, c.subject_id);
+  const ids = S.units.map((u) => u.id);
+  const plans = ids.length ? must(await sb.from("lesson_plans").select("unit_id,seq,title,indicator_codes").in("unit_id", ids)) : [];
+  const uOf = new Map(S.units.map((u) => [u.id, u]));
+  const info = new Map(inds.map((i) => [i.code, { i, units: [], plans: [] }]));
+  S.units.forEach((u) => (u.indicator_codes ?? []).forEach((k) => info.get(k)?.units.push(u)));
+  plans.forEach((p) => (p.indicator_codes ?? []).forEach((k) => info.get(k)?.plans.push(p)));
+  const unknown = [...new Set([...S.units.flatMap((u) => u.indicator_codes ?? []), ...plans.flatMap((p) => p.indicator_codes ?? [])])].filter((k) => !info.has(k));
+  const stdOf = new Map(stds.map((x) => [x.standard_code, x]));
+  const groups = new Map();
+  inds.forEach((i) => { const sd = stdOf.get(i.standard_code), key = sd?.strand_no ? `สาระที่ ${sd.strand_no}${sd.strand_name ? " " + sd.strand_name : ""}` : "ไม่ระบุสาระ"; const g = groups.get(key) ?? new Map(); const arr = g.get(i.standard_code) ?? []; arr.push(info.get(i.code)); g.set(i.standard_code, arr); groups.set(key, g); });
+  const used = (x) => x.plans.length, tot = sum(inds.map((i) => used(info.get(i.code)))), covered = inds.filter((i) => used(info.get(i.code)) > 0).length;
+  const miss = inds.filter((i) => !used(info.get(i.code)) && !info.get(i.code).units.length), unitOnly = inds.filter((i) => !used(info.get(i.code)) && info.get(i.code).units.length);
+  const color = (x) => (!x.plans.length ? (x.units.length ? "var(--warn)" : "var(--red)") : "inherit");
+  const bg = (x) => (!x.plans.length ? (x.units.length ? "var(--warnbg)" : "var(--redbg)") : "transparent");
+  const body = [...groups].map(([name, g]) => {
+    const all = [...g.values()].flat(), gUsed = sum(all.map(used)), gCov = all.filter((x) => used(x) > 0).length;
+    return `<details class="sec" open><summary>${esc(name)} · ใช้ ${gUsed} ครั้ง · ครอบคลุม ${gCov}/${all.length} ตัว</summary><div class="body">${[...g].map(([sc, arr]) => `<div class="small"><b>${esc(sc ?? "-")}</b> ${esc(stdOf.get(sc)?.description ?? "")} <span class="muted">· ใช้ ${sum(arr.map(used))} ครั้ง</span></div>
+      <div class="tablewrap"><table><tr><th>ตัวชี้วัด</th><th>ในหน่วย</th><th>ในแผน (ครั้ง)</th><th>แผนที่ใช้</th></tr>${arr.map((x) => `<tr style="background:${bg(x)};color:${color(x)}"><td>${esc(x.i.code)} ${esc(x.i.description)}</td><td>${x.units.length}</td><td><b>${x.plans.length}</b></td><td class="small">${x.plans.map((p) => `หน่วย ${uOf.get(p.unit_id)?.seq ?? "?"} แผน ${p.seq}`).join(", ") || "—"}</td></tr>`).join("")}</table></div>`).join("")}</div></details>`;
+  }).join("");
+  el.innerHTML = `<div class="card accent"><h2>8 · ตรวจตัวชี้วัด <span class="muted small">— ใช้ในแผนกี่ครั้ง</span></h2>
+    <div class="check"><div class="stat"><span class="muted small">ใช้รวมทั้งหมด (ครั้ง)</span><b>${tot}</b></div><div class="stat"><span class="muted small">ครอบคลุม</span><b>${covered}/${inds.length}</b></div><div class="stat ${miss.length ? "bad" : ""}"><span class="muted small">ยังไม่ใช้เลย</span><b>${miss.length}</b></div><div class="stat ${unitOnly.length ? "warn" : ""}"><span class="muted small">อยู่ในหน่วย แต่ยังไม่มีแผน</span><b>${unitOnly.length}</b></div></div>
+    <p class="small muted">แดง = ไม่อยู่ในหน่วยหรือแผนใดเลย · เหลือง = อยู่ในหน่วยแล้วแต่ยังไม่มีแผนรองรับ · ตัวเลข "ครั้ง" นับจำนวนแผนรายคาบที่เลือกตัวชี้วัดนั้น</p>
+    ${unknown.length ? `<div class="errbox small">รหัสที่ไม่พบในหลักสูตร: ${unknown.map(esc).join(", ")}</div>` : ""}
+    <div class="row" style="margin:8px 0"><button class="btn small" data-act="t10-refresh">นับใหม่</button></div></div>${body || '<div class="card muted">ยังไม่มีตัวชี้วัดของวิชานี้</div>'}`;
+}
+
 async function render8() {
   const el = $("#t8");
-  if (!S.course) { el.innerHTML = `<div class="card accent"><h2>8 · ดาวน์โหลด</h2><p>เลือกรายวิชาที่แถบ 3 ก่อน</p><button class="btn" data-act="goto" data-tab="t2">ไปแถบ 3</button></div>`; return; }
+  if (!S.course) { el.innerHTML = `<div class="card accent"><h2>9 · ดาวน์โหลด</h2><p>เลือกรายวิชาที่แถบ 3 ก่อน</p><button class="btn" data-act="goto" data-tab="t2">ไปแถบ 3</button></div>`; return; }
   const ids = S.units.map((u) => u.id);
   const plans = ids.length ? must(await sb.from("lesson_plans").select("*").in("unit_id", ids).order("seq")) : [];
   T8.plans = plans;
@@ -835,7 +869,7 @@ async function render8() {
     return `<div class="card"><div class="row"><label style="flex-direction:row;gap:8px;color:var(--text)"><input type="checkbox" data-t8u="${u.id}"> <b>หน่วยที่ ${u.seq} ${esc(u.name)}</b></label><span class="muted small">${ps.length} แผน</span><button class="btn small" data-act="t8-unit" data-id="${u.id}" ${ps.length ? "" : "disabled"}>โหลดทั้งหน่วย (1 ไฟล์)</button></div>
       ${ps.map((p) => `<div class="row" style="margin-top:6px"><label style="flex:1;flex-direction:row;gap:8px;color:var(--text)"><input type="checkbox" data-t8p="${p.id}" data-u="${u.id}" ${T8.sel.has(p.id) ? "checked" : ""}> แผนที่ ${p.seq} ${esc(p.title)}</label><button class="btn small" data-act="t8-one" data-id="${p.id}">โหลด</button></div>`).join("") || '<div class="muted small">ยังไม่มีแผน</div>'}</div>`;
   }).join("") || '<div class="muted">ยังไม่มีหน่วยการเรียนรู้</div>';
-  el.innerHTML = `<div class="card accent"><h2>8 · ดาวน์โหลด <span class="muted small">— เลือกแล้วโหลดเป็นไฟล์ Word แยกรายแผน</span></h2>
+  el.innerHTML = `<div class="card accent"><h2>9 · ดาวน์โหลด <span class="muted small">— เลือกแล้วโหลดเป็นไฟล์ Word แยกรายแผน</span></h2>
     <div class="row"><button class="btn small" data-act="t8-all">เลือกทั้งหมด</button><button class="btn small" data-act="t8-none">ล้างที่เลือก</button><button class="btn small primary" data-act="t8-zip">โหลดที่เลือก (ZIP แยกไฟล์)</button><button class="btn small accent" data-act="t8-each">โหลดที่เลือกทีละไฟล์</button></div>
     <div class="muted small" id="t8n" style="margin-top:6px">เลือก 0 แผน</div></div>
     ${body}
@@ -1109,6 +1143,7 @@ const actions = {
     const row = must(await sb.from("lesson_plans").insert({ unit_id: S.unit.id, seq, title: "แผนใหม่", hours: 1, indicator_codes: S.unit.indicator_codes, sections: emptySections() }).select().single());
     await loadPlans(); S.plan = S.plans.find((p) => p.id === row.id); render4();
   }),
+  "t10-refresh": () => render10(),
   "t4-ind-rm": async (b, e) => { e?.preventDefault?.(); const p = S.plans.find((x) => x.id === b.dataset.id); if (!p) return;
     must(await sb.from("lesson_plans").update({ indicator_codes: p.indicator_codes.filter((c) => c !== b.dataset.code) }).eq("id", p.id)); await loadPlans(); render4(); },
   "t4-ind-edit": async (b) => { const p = S.plans.find((x) => x.id === b.dataset.id); if (!p) return;
