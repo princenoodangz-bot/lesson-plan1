@@ -365,7 +365,7 @@ function render1() {
   const el = $("#t1");
   el.innerHTML = `
   <div class="card accent">
-    <h2>1 · โครงสร้างหลักสูตรสถานศึกษา</h2>
+    <h2>0 · โครงสร้างหลักสูตรสถานศึกษา</h2>
     <p class="muted">เลือกวิชา ชั้น และหลักสูตร ระบบจะดึงมาตรฐานและตัวชี้วัดจริงจากฐานข้อมูลหลักสูตร (ไม่ให้ AI เดา)</p>
     <div class="grid">
       <label>กลุ่มสาระ/วิชา<select id="t1s">${optList(S.subjects, "id", "name")}</select></label>
@@ -392,7 +392,7 @@ function renderT1List() {
   $("#t1list").innerHTML = S.curStructs.length ? S.curStructs.map((c) => `
     <div class="item ${S.cs?.id === c.id ? "sel" : ""}">
       <div><div class="t">${esc(c.title)}</div><div class="muted small">${esc(subjName(c.subject_id))} · ป.${c.grade} · ${esc(c.curriculum_id)} · ${c.content?.indicators?.length ?? 0} ตัวชี้วัด · ${c.content?.time?.total_hours ?? "-"} ชม.</div></div>
-      <div class="row"><button class="btn small primary" data-act="t1-use" data-id="${c.id}">ใช้ต่อ → แถบ 2</button><button class="btn small danger" data-act="t1-del" data-id="${c.id}">ลบ</button></div>
+      <div class="row"><button class="btn small primary" data-act="t1-use" data-id="${c.id}">ใช้ต่อ → แถบ 3</button><button class="btn small danger" data-act="t1-del" data-id="${c.id}">ลบ</button></div>
     </div>`).join("") : '<div class="muted">ยังไม่มี</div>';
 }
 function renderT1Prev() {
@@ -430,8 +430,8 @@ function render2() {
   const csOpts = S.curStructs.map((c) => `<option value="${c.id}">${esc(c.title)} (ป.${c.grade})</option>`).join("");
   el.innerHTML = `
   <div class="card accent">
-    <h2>2 · โครงสร้างรายวิชา</h2>
-    <p class="muted">ดึงตัวชี้วัดจากโครงสร้างหลักสูตรในแถบ 1 แล้วกำหนดหน่วย เวลา และน้ำหนักคะแนน</p>
+    <h2>3 · โครงสร้างรายวิชา</h2>
+    <p class="muted">ดึงตัวชี้วัดจากโครงสร้างหลักสูตรในแถบ 0 แล้วกำหนดหน่วย เวลา และน้ำหนักคะแนน</p>
     ${S.curStructs.length ? `<div class="grid">
       <label>โครงสร้างหลักสูตรต้นทาง<select id="t2cs">${csOpts}</select></label>
       <label>รหัสวิชา<input id="t2code" placeholder="เช่น พ15101"></label>
@@ -439,7 +439,7 @@ function render2() {
       <label>เวลาเรียนรวม (ชั่วโมง)<input id="t2hours" type="number" min="1"></label>
       <label>จำนวนภาคเรียน<select id="t2sem"><option>2</option><option>1</option></select></label>
     </div>
-    <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t2-create">สร้างโครงสร้างรายวิชา</button></div>` : `<p>ต้องสร้างโครงสร้างหลักสูตรในแถบ 1 ก่อน</p><button class="btn" data-act="goto" data-tab="t1">ไปแถบ 1</button>`}
+    <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t2-create">สร้างโครงสร้างรายวิชา</button></div>` : `<p>ต้องสร้างโครงสร้างหลักสูตรในแถบ 0 ก่อน</p><button class="btn" data-act="goto" data-tab="t1">ไปแถบ 0</button>`}
   </div>
   <div class="card"><h3>รายวิชาที่สร้างไว้</h3><div class="list">${S.courses.map((c) => `
     <div class="item ${S.course?.id === c.id ? "sel" : ""}"><div><div class="t">${esc(c.course_code ?? "")} ${esc(c.course_name)}</div>
@@ -463,7 +463,7 @@ function readPreview() {
   ${miss.length ? `<details open style="margin-top:6px"><summary class="small"><b>ตัวชี้วัดที่ยังไม่มีในกำหนดการ (${miss.length})</b></summary>${miss.map((i) => `<div class="small">• ${esc(i.code)} ${esc(i.description)} <span class="muted">(${esc(i.kind ?? "")})</span></div>`).join("")}<div class="row" style="margin-top:6px"><button class="btn small accent" data-act="read-fill">ให้ AI เสนอแผนเสริมให้ตัวชี้วัดที่ขาด</button></div></details>` : ""}</div>
   ${r.notes ? `<p class="small">📝 ${esc(r.notes)}</p>` : ""}
   <div class="tablewrap"><table><tr><th>#</th><th>ภาค</th><th>หน่วย/สอบ</th><th>ตัวชี้วัด</th><th>ชม.</th><th>คะแนน</th>${r.withPlans ? "<th>หัวข้อแผน</th>" : ""}</tr>${r.rows.map((x, i) => `<tr><td>${i + 1}</td><td>${x.semester ?? ""}</td><td>${esc(x.name)}${x.kind === "exam" ? " (สอบ)" : ""}</td><td class="small">${x.indicator_codes.map(esc).join("<br>")}${x.bad?.length ? `<br><span style="color:#ff6b6b">ไม่พบ: ${x.bad.map(esc).join(", ")}</span>` : ""}</td><td>${x.hours}</td><td>${x.score_weight}</td>${r.withPlans ? `<td class="small">${(x.plans ?? []).map((p, k) => `${k + 1}. ${esc(p.title)} (${p.hours} ชม.)${p.extra ? " ✚เสริม" : ""}${(p.indicator_codes ?? []).length ? `<br><span class="muted">${p.indicator_codes.map(esc).join(", ")}</span>` : ""}`).join("<br>")}</td>` : ""}</tr>`).join("")}</table></div>
-  <p class="small">${r.rows.filter((x) => x.kind === "unit").length} หน่วย${r.withPlans ? ` · ${np} หัวข้อแผน` : ""} — ตรวจแล้วกดใช้ (แก้ไขรายละเอียดต่อได้ที่แถบ 2–4)</p>
+  <p class="small">${r.rows.filter((x) => x.kind === "unit").length} หน่วย${r.withPlans ? ` · ${np} หัวข้อแผน` : ""} — ตรวจแล้วกดใช้ (แก้ไขรายละเอียดต่อได้ที่แถบ 3–5)</p>
   <div class="row"><button class="btn primary" data-act="read-apply">ใช้โครงสร้างนี้</button><button class="btn" data-act="read-clear">ทิ้ง</button></div>`;
 }
 async function renderT2Edit() {
@@ -496,7 +496,7 @@ async function renderT2Edit() {
       <td class="num"><input data-row="${i}" data-f="score_weight" type="number" min="0" value="${r.score_weight}"></td>
       <td><div class="row"><button class="btn small" data-act="t2-up" data-row="${i}">↑</button><button class="btn small" data-act="t2-down" data-row="${i}">↓</button><button class="btn small danger" data-act="t2-rm" data-row="${i}">✕</button></div></td></tr>`).join("")}
     </table></div>
-    <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t2-save">บันทึกโครงสร้างรายวิชา</button><button class="btn" data-act="goto" data-tab="t3">ไปแถบ 3 →</button></div>
+    <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t2-save">บันทึกโครงสร้างรายวิชา</button><button class="btn" data-act="goto" data-tab="t3">ไปแถบ 4 →</button></div>
   </div>`;
 }
 
@@ -506,9 +506,9 @@ async function renderT2Edit() {
 async function render3() {
   const el = $("#t3");
   const opts = S.courses.map((c) => `<option value="${c.id}">${esc(c.course_code ?? "")} ${esc(c.course_name)} ป.${c.grade}</option>`).join("");
-  el.innerHTML = `<div class="card accent"><h2>3 · หน่วยการเรียนรู้</h2>
+  el.innerHTML = `<div class="card accent"><h2>4 · หน่วยการเรียนรู้</h2>
     <p class="muted">สร้างจากโครงสร้างรายวิชา กี่หน่วยก็ได้ (แยกหรือเพิ่มหน่วยเองได้) ชั่วโมงรวมต้องไม่เกินชั่วโมงของรายวิชา</p>
-    ${S.courses.length ? `<div class="row"><label style="flex:1">รายวิชา<select id="t3c">${opts}</select></label></div>` : `<p>ต้องสร้างโครงสร้างรายวิชาในแถบ 2 ก่อน</p><button class="btn" data-act="goto" data-tab="t2">ไปแถบ 2</button>`}</div>
+    ${S.courses.length ? `<div class="row"><label style="flex:1">รายวิชา<select id="t3c">${opts}</select></label></div>` : `<p>ต้องสร้างโครงสร้างรายวิชาในแถบ 3 ก่อน</p><button class="btn" data-act="goto" data-tab="t2">ไปแถบ 3</button>`}</div>
     <div id="t3body"></div>`;
   const sel = $("#t3c"); if (!sel) return;
   if (S.course) sel.value = S.course.id; else { S.course = S.courses[0]; await loadRows(); await loadUnits(); sel.value = S.course.id; }
@@ -543,7 +543,7 @@ async function renderT3Body() {
 const planDone = (p) => !!String(p.sections?.key_idea ?? "").trim();
 async function render4() {
   const el = $("#t4");
-  if (!S.units.length) { el.innerHTML = `<div class="card accent"><h2>4 · หัวข้อแผนรายคาบ (ร่างเรื่องคร่าวๆ ก่อน)</h2><p>ต้องมีหน่วยการเรียนรู้ในแถบ 3 ก่อน</p><button class="btn" data-act="goto" data-tab="t3">ไปแถบ 3</button></div>`; return; }
+  if (!S.units.length) { el.innerHTML = `<div class="card accent"><h2>5 · หัวข้อแผนรายคาบ (ร่างเรื่องคร่าวๆ ก่อน)</h2><p>ต้องมีหน่วยการเรียนรู้ในแถบ 4 ก่อน</p><button class="btn" data-act="goto" data-tab="t3">ไปแถบ 4</button></div>`; return; }
   let view = "table"; try { view = localStorage.getItem("lp_view") || "table"; } catch {}
   const unitOpts = S.units.map((u) => `<option value="${u.id}">หน่วยที่ ${u.seq} ${esc(u.name)} (${u.hours} ชม.)</option>`).join("");
   const ph = sum(S.plans.map((p) => num(p.hours)));
@@ -562,7 +562,7 @@ async function render4() {
       <div class="small" style="margin-top:8px"><div class="chips">${p.indicator_codes.map((c) => `<span class="chip">${esc(c)}</span>`).join("")}</div>
       <p><b>สาระสำคัญ:</b> ${esc(p.sections?.key_idea || "-")}</p><p><b>จุดประสงค์:</b> ${esc([p.sections?.objectives?.K, p.sections?.objectives?.P, p.sections?.objectives?.A].filter(Boolean).join(" | ") || "-")}</p>
       <div class="row"><button class="btn small primary" data-act="t4-pick" data-id="${p.id}">เขียนแผน →</button> <button class="btn small" data-act="t4-copy" data-id="${p.id}">คัดลอก</button> <button class="btn small danger" data-act="t4-del-id" data-id="${p.id}">ลบ</button></div></div></details>`).join("") || '<div class="muted">ยังไม่มีแผน</div>'}</div>`;
-  el.innerHTML = `<div class="card accent"><h2>4 · หัวข้อแผนรายคาบ (ร่างเรื่องคร่าวๆ ก่อน)</h2>
+  el.innerHTML = `<div class="card accent"><h2>5 · หัวข้อแผนรายคาบ (ร่างเรื่องคร่าวๆ ก่อน)</h2>
     <div class="row"><label style="flex:1">หน่วยการเรียนรู้<select id="t4u">${unitOpts}</select></label></div>
     <div class="check"><div class="stat ${ph === S.unit.hours ? "ok" : "bad"}"><span class="muted small">ชั่วโมงแผนรวม</span><b>${ph}/${S.unit.hours}</b></div><div class="stat"><span class="muted small">จำนวนแผน</span><b>${S.plans.length}</b></div><div class="stat"><span class="muted small">ร่างแล้ว</span><b>${S.plans.filter(planDone).length}/${S.plans.length}</b></div></div>
     ${inBox("ti", "พิมพ์รายการหัวข้อ/เรื่องที่ครูจะสอนในหน่วยนี้ (บรรทัดละเรื่อง) หรือแนบกำหนดการ ระบบจะคงหัวข้อของครูไว้ เติมที่ขาดให้ครบชั่วโมงและตัวชี้วัด")}<div class="row" style="margin-top:10px"><button class="btn small primary" data-act="t4-add">+ เพิ่มหัวข้อ</button><button class="btn small accent" data-act="t4-ai-titles">✨ AI วางหัวข้อทั้งหน่วย (ใช้ข้อมูลจากครูด้านล่างถ้ามี)</button><button class="btn small" data-act="t4-check">ตรวจความครบถ้วน</button><button class="btn small" data-act="t4-export-unit">ส่งออก Word ทั้งหน่วย</button></div></div>
@@ -574,13 +574,13 @@ async function render4() {
 }
 async function render5() {
   const el = $("#t5");
-  if (!S.units.length) { el.innerHTML = `<div class="card accent"><h2>5 · เขียนแผนรายคาบ</h2><p>ต้องมีหน่วยการเรียนรู้ในแถบ 3 ก่อน</p><button class="btn" data-act="goto" data-tab="t3">ไปแถบ 3</button></div>`; return; }
+  if (!S.units.length) { el.innerHTML = `<div class="card accent"><h2>6 · เขียนแผนรายคาบ</h2><p>ต้องมีหน่วยการเรียนรู้ในแถบ 4 ก่อน</p><button class="btn" data-act="goto" data-tab="t3">ไปแถบ 4</button></div>`; return; }
   const unitOpts = S.units.map((u) => `<option value="${u.id}">หน่วยที่ ${u.seq} ${esc(u.name)} (${u.hours} ชม.)</option>`).join("");
   const idx = S.plans.findIndex((p) => p.id === S.plan?.id);
-  el.innerHTML = `<div class="card accent"><h2>5 · เขียนแผนรายคาบ <span class="muted small">— ทีละแผน ทีละหน่วย</span></h2>
+  el.innerHTML = `<div class="card accent"><h2>6 · เขียนแผนรายคาบ <span class="muted small">— ทีละแผน ทีละหน่วย</span></h2>
     <div class="grid"><label>หน่วยการเรียนรู้<select id="t5u">${unitOpts}</select></label>
-    <label>แผน (หัวข้อจากแถบ 4)<select id="t5p">${S.plans.map((p) => `<option value="${p.id}">แผนที่ ${p.seq} ${planDone(p) ? "✓ " : ""}${esc(p.title)}</option>`).join("")}</select></label></div>
-    ${S.plans.length ? `<div class="row" style="margin-top:10px"><button class="btn small" data-act="t5-prev" ${idx <= 0 ? "disabled" : ""}>← แผนก่อนหน้า</button><span class="muted small">แผนที่ ${idx + 1}/${S.plans.length} · เขียนแล้ว ${S.plans.filter(planDone).length}</span><button class="btn small" data-act="t5-next" ${idx >= S.plans.length - 1 ? "disabled" : ""}>แผนถัดไป →</button></div>` : `<p class="muted">ยังไม่มีหัวข้อแผนในหน่วยนี้ ไปสร้างหัวข้อที่แถบ 4 ก่อน</p><button class="btn" data-act="goto" data-tab="t4">ไปแถบ 4</button>`}</div>
+    <label>แผน (หัวข้อจากแถบ 5)<select id="t5p">${S.plans.map((p) => `<option value="${p.id}">แผนที่ ${p.seq} ${planDone(p) ? "✓ " : ""}${esc(p.title)}</option>`).join("")}</select></label></div>
+    ${S.plans.length ? `<div class="row" style="margin-top:10px"><button class="btn small" data-act="t5-prev" ${idx <= 0 ? "disabled" : ""}>← แผนก่อนหน้า</button><span class="muted small">แผนที่ ${idx + 1}/${S.plans.length} · เขียนแล้ว ${S.plans.filter(planDone).length}</span><button class="btn small" data-act="t5-next" ${idx >= S.plans.length - 1 ? "disabled" : ""}>แผนถัดไป →</button></div>` : `<p class="muted">ยังไม่มีหัวข้อแผนในหน่วยนี้ ไปสร้างหัวข้อที่แถบ 5 ก่อน</p><button class="btn" data-act="goto" data-tab="t4">ไปแถบ 5</button>`}</div>
     <div id="t4edit"></div>`;
   $("#t5u").value = S.unit.id; if (S.plan) $("#t5p").value = S.plan.id;
   $("#t5u").addEventListener("change", async (e) => { await autosavePlan(); S.unit = S.units.find((u) => u.id === e.target.value); S.plan = null; await loadPlans(); saveSel(); render5(); });
@@ -589,11 +589,11 @@ async function render5() {
 }
 async function render6() {
   const el = $("#t6");
-  if (!S.plans.length || !S.plan) { el.innerHTML = `<div class="card accent"><h2>6 · พรีวิวแผน</h2><p>ยังไม่มีแผนให้ดู สร้างหัวข้อที่แถบ 4 แล้วเขียนที่แถบ 5 ก่อน</p><button class="btn" data-act="goto" data-tab="t4">ไปแถบ 4</button></div>`; return; }
+  if (!S.plans.length || !S.plan) { el.innerHTML = `<div class="card accent"><h2>7 · พรีวิวแผน</h2><p>ยังไม่มีแผนให้ดู สร้างหัวข้อที่แถบ 5 แล้วเขียนที่แถบ 6 ก่อน</p><button class="btn" data-act="goto" data-tab="t4">ไปแถบ 5</button></div>`; return; }
   const idx = S.plans.findIndex((p) => p.id === S.plan.id);
   const ctx = await exportCtx();
   const { planPreviewHtml } = await import("./preview.js");
-  el.innerHTML = `<div class="card accent"><h2>6 · พรีวิวแผน <span class="muted small">— หน้าตาตามแผนต้นฉบับ 12 หัวข้อ</span></h2>
+  el.innerHTML = `<div class="card accent"><h2>7 · พรีวิวแผน <span class="muted small">— หน้าตาตามแผนต้นฉบับ 12 หัวข้อ</span></h2>
     <div class="row"><label style="flex:1">แผน<select id="t6p">${S.plans.map((p) => `<option value="${p.id}">แผนที่ ${p.seq} ${planDone(p) ? "✓ " : ""}${esc(p.title)}</option>`).join("")}</select></label></div>
     <div class="row" style="margin-top:10px"><button class="btn small" data-act="t6-prev" ${idx <= 0 ? "disabled" : ""}>← ก่อนหน้า</button><button class="btn small" data-act="t6-next" ${idx >= S.plans.length - 1 ? "disabled" : ""}>ถัดไป →</button><button class="btn small primary" data-act="t6-edit">แก้ไขแผนนี้</button><button class="btn small accent" data-act="t4-export">ส่งออก Word</button></div></div>
     ${planPreviewHtml(ctx, S.plan)}`;
@@ -658,8 +658,8 @@ function render9() {
   const el = $("#t9");
   const cl = S.courses.map((c) => `<div class="item"><div><div class="t">${esc(c.course_code ?? "")} ${esc(c.course_name)}</div><div class="muted small">${esc(subjName(c.subject_id))} · ป.${c.grade} · ${esc(c.curriculum_id)} · ${c.total_hours} ชม.${csOfCourse(c)?.content?.doc?.course_description ? " · มีเนื้อหาหลักสูตรแล้ว" : ""}</div></div>
     <div class="row"><button class="btn small primary" data-act="t9-cur" data-id="${c.id}">หลักสูตรสถานศึกษา (Word)</button><button class="btn small accent" data-act="t9-sch" data-id="${c.id}">กำหนดการสอน (Word)</button><button class="btn small" data-act="t9-aidoc" data-id="${c.id}">AI ร่างเนื้อหาหลักสูตร</button></div></div>`).join("") || '<div class="muted">ยังไม่มีรายวิชา ใช้ฟอร์มด้านบนสร้างได้เลย</div>';
-  el.innerHTML = `<div class="card accent"><h2>9 · หลักสูตรสถานศึกษา และกำหนดการสอน <span class="muted small">— สร้างตั้งแต่ต้นด้วย AI แล้วโหลดเป็น Word</span></h2>
-    <p class="muted small">กดครั้งเดียว ระบบดึงตัวชี้วัดจริงจากฐานข้อมูล → AI ร่างเนื้อหาหลักสูตร → AI ร่างหน่วยการเรียนรู้ ชั่วโมง คะแนน → สร้างหน่วย แก้ไขต่อได้ที่แถบ 1–3</p>
+  el.innerHTML = `<div class="card accent"><h2>2 · หลักสูตรสถานศึกษา และกำหนดการสอน <span class="muted small">— สร้างตั้งแต่ต้นด้วย AI แล้วโหลดเป็น Word</span></h2>
+    <p class="muted small">กดครั้งเดียว ระบบดึงตัวชี้วัดจริงจากฐานข้อมูล → AI ร่างเนื้อหาหลักสูตร → AI ร่างหน่วยการเรียนรู้ ชั่วโมง คะแนน → สร้างหน่วย แก้ไขต่อได้ที่แถบ 0 กับแถบ 3–4</p>
     <div class="grid">
       <label>กลุ่มสาระ/วิชา<select id="t9s">${optList(S.subjects, "id", "name")}</select></label>
       <label>หลักสูตร<select id="t9c">${S.curricula.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></label>
@@ -717,7 +717,7 @@ async function render0() {
   const el = $("#t0");
   if (!BK.books) await bkLoad();
   const list = BK.books.map((b) => `<div class="item ${BK.book?.id === b.id ? "sel" : ""}"><div><div class="t">${esc(b.title)}</div><div class="muted small">${esc(subjName(b.subject_id))} · ${esc(b.curriculum_id)}</div></div><div class="row"><button class="btn small primary" data-act="bk-open" data-id="${b.id}">เปิด</button><button class="btn small danger" data-act="bk-del" data-id="${b.id}">ลบ</button></div></div>`).join("") || '<div class="muted">ยังไม่มีเล่มหลักสูตร</div>';
-  el.innerHTML = `<div class="card accent"><h2>0 · เล่มหลักสูตรสถานศึกษา <span class="muted small">— ต้องทำก่อน แล้วค่อยไปรายวิชา หน่วย และแผน</span></h2>
+  el.innerHTML = `<div class="card accent"><h2>1 · เล่มหลักสูตรสถานศึกษา <span class="muted small">— ต้องทำก่อน แล้วค่อยไปรายวิชา หน่วย และแผน</span></h2>
     <p class="muted small">สร้างเล่มเต็ม (ปก คำนำ ความนำ มาตรฐาน คุณภาพผู้เรียน ตัวชี้วัดระหว่างทาง/ปลายทาง สาระแกนกลาง คำอธิบายและโครงสร้างรายวิชา ป.1–6 เวลาเรียน เกณฑ์ประเมิน อภิธานศัพท์) มาตรฐานและตัวชี้วัดดึงจากฐานข้อมูลจริง ส่วนที่ AI เขียนต้องตรวจก่อนใช้</p>
     <div class="grid"><label>กลุ่มสาระ/วิชา<select id="b0s">${optList(S.subjects, "id", "name")}</select></label><label>หลักสูตร<select id="b0c">${S.curricula.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></label></div>
     <div class="row" style="margin-top:10px"><button class="btn primary" data-act="bk-new">สร้างเล่มใหม่</button></div></div>
@@ -738,7 +738,7 @@ function renderBook() {
   const gr = [1, 2, 3, 4, 5, 6].map((g) => { const x = d.grades?.[g] ?? {}; const st = x.structure ?? [];
     return `<details class="card" data-dk="g${g}"><summary><b>${filled(x.desc)}${st.length ? "✓" : "○"}${Object.keys(x.core ?? {}).length ? "✓" : "○"}${d.reviewed?.["g" + g] ? "✔" : ""} ชั้นประถมศึกษาปีที่ ${g}</b> <span class="muted small">${st.length} แถวโครงสร้าง · ${Object.keys(x.core ?? {}).length} สาระแกนกลาง</span></summary>
       <div class="grid" style="margin:8px 0"><label>รหัสวิชา<input data-bk="grades.${g}.code" value="${esc(x.code ?? "")}"></label><label>ชื่อรายวิชา<input data-bk="grades.${g}.name" value="${esc(x.name ?? "")}"></label><label>ชั่วโมง/ปี<input type="number" data-bk="grades.${g}.hours" value="${x.hours ?? 80}"></label></div>
-      <div class="row" style="margin-bottom:8px"><button class="btn small" data-act="bk-use-course" data-g="${g}">ใช้โครงสร้างจากรายวิชาที่สร้างไว้ (แถบ 2)</button></div>
+      <div class="row" style="margin-bottom:8px"><button class="btn small" data-act="bk-use-course" data-g="${g}">ใช้โครงสร้างจากรายวิชาที่สร้างไว้ (แถบ 3)</button></div>
       <div class="card" style="padding:10px"><div class="row"><b>① สาระการเรียนรู้แกนกลาง</b><span class="muted small">ทำทีละสาระ</span></div><div class="row" style="margin-top:6px">${bkStrands().map((n) => `<button class="btn small" data-act="bk-ai-core" data-g="${g}" data-n="${n}">AI สาระที่ ${n}</button>`).join("") || '<span class="muted small">ไม่พบสาระ</span>'}</div>
       <details style="margin-top:8px" data-dk="gc${g}"><summary>แก้ไขรายตัวชี้วัด (${Object.keys(x.core ?? {}).length})</summary>${Object.entries(x.core ?? {}).map(([c, v]) => `<label>${esc(c.replace(/‧/g, "."))} — สาระแกนกลาง<textarea rows="2" data-bk="grades.${g}.core.${c}">${esc(v)}</textarea></label><label class="small">สาระท้องถิ่น<textarea rows="1" data-bk="grades.${g}.local.${c}">${esc(x.local?.[c] ?? "")}</textarea></label>`).join("") || '<div class="muted small">ยังไม่มี</div>'}</details></div>
       <div class="card" style="padding:10px"><div class="row"><b>② โครงสร้างรายวิชา</b><button class="btn small" data-act="bk-ai-struct" data-g="${g}">AI ร่างหน่วย/ชั่วโมง/คะแนน</button></div>
@@ -752,7 +752,7 @@ function renderBook() {
     <label>ขอบข่ายที่ต้องการ (ให้ AI ใช้)<input data-bk="extra.${i}.note" value="${esc(x.note ?? "")}" placeholder="เช่น ว่ายน้ำเพื่อความปลอดภัย"></label>
     <div class="row" style="margin:6px 0"><button class="btn small" data-act="bk-ai-extra" data-i="${i}">AI ร่างคำอธิบาย</button><button class="btn small danger" data-act="bk-ex-del" data-i="${i}">ลบรายวิชา</button></div>${ta(`extra.${i}.desc`, 6)}</div>`).join("");
   const noData = !(BK.stds ?? []).length;
-  ed.innerHTML = `${noData ? `<div class="card" style="border:2px solid var(--red)"><b>⚠ ยังไม่มีมาตรฐาน/ตัวชี้วัดของวิชานี้ในระบบ</b><p class="small">AI จะเขียนโดยไม่มีข้อมูลจริงอ้างอิง ไปแถบ 1 → "นำเข้าตัวชี้วัดเอง" วางมาตรฐานและตัวชี้วัด ป.1–6 จากเอกสารหลักสูตรก่อน แล้วกลับมากด AI ใหม่</p><button class="btn small" data-act="goto" data-tab="t1">ไปแถบ 1</button></div>` : ""}<div class="card accent"><h3>${esc(b.title)}</h3><div class="row"><button class="btn accent" data-act="bk-doc">ดาวน์โหลด Word ทั้งเล่ม</button><button class="btn" data-act="bk-next">ไปรายวิชา → แถบ 2</button></div>
+  ed.innerHTML = `${noData ? `<div class="card" style="border:2px solid var(--red)"><b>⚠ ยังไม่มีมาตรฐาน/ตัวชี้วัดของวิชานี้ในระบบ</b><p class="small">AI จะเขียนโดยไม่มีข้อมูลจริงอ้างอิง ไปแถบ 0 → "นำเข้าตัวชี้วัดเอง" วางมาตรฐานและตัวชี้วัด ป.1–6 จากเอกสารหลักสูตรก่อน แล้วกลับมากด AI ใหม่</p><button class="btn small" data-act="goto" data-tab="t1">ไปแถบ 0</button></div>` : ""}<div class="card accent"><h3>${esc(b.title)}</h3><div class="row"><button class="btn accent" data-act="bk-doc">ดาวน์โหลด Word ทั้งเล่ม</button><button class="btn" data-act="bk-next">ไปรายวิชา → แถบ 3</button></div>
     <div class="muted small" style="margin-top:6px">กด AI ทีละส่วน ตรวจแล้วติ๊ก "ตรวจแล้ว" ✔ = ตรวจแล้ว ✓ = มีเนื้อหา ○ = ยังว่าง</div><div class="muted small" id="bkst" style="margin-top:6px"></div></div>
     <div class="card"><b>ข้อมูลทั่วไปของโรงเรียน</b> <span class="muted small">— ใช้กับทุกส่วนของเล่ม (วิสัยทัศน์ พันธกิจ บริบทชุมชน จุดเด่นของโรงเรียน ฯลฯ ใส่เท่าที่มี)</span><textarea rows="4" data-bk="school_info" placeholder="เช่น วิสัยทัศน์ของโรงเรียน บริบทชุมชน กิจกรรมเด่น ภูมิปัญญาท้องถิ่น">${esc(d.school_info ?? "")}</textarea></div><h3>ส่วนหน้า/ท้ายเล่ม</h3>${texts}<h3>รายชั้น ป.1–6</h3>${gr}
     <details class="card" data-dk="extra"><summary><b>${d.extra.length ? "✓" : "○"} รายวิชาเพิ่มเติม (${d.extra.length})</b></summary><p class="muted small">ใช้ "ผลการเรียนรู้" แทนตัวชี้วัด</p>${exHtml}<button class="btn small" data-act="bk-ex-add">+ เพิ่มรายวิชาเพิ่มเติม</button></details>
@@ -771,7 +771,7 @@ async function bkCtx() {
 const bkMsg = (m) => { const e = $("#bkst"); if (e) e.textContent = m; };
 async function bkRetry(fn) { try { return await fn(); } catch (e) { await new Promise((r) => setTimeout(r, 2500)); return await fn(); } }
 async function bkAiText(k, c, extra) {
-  if (!c.inds.length) throw new Error("ยังไม่มีตัวชี้วัดของวิชานี้ในระบบ นำเข้าที่แถบ 1 ก่อน");
+  if (!c.inds.length) throw new Error("ยังไม่มีตัวชี้วัดของวิชานี้ในระบบ นำเข้าที่แถบ 0 ก่อน");
   const b = BK.book, cn = S.curricula.find((x) => x.id === b.curriculum_id)?.name ?? b.curriculum_id;
   const out = await bkRetry(() => callAI(promptBookText(k, { school: S.settings?.school_name ?? "", subject: bkSub(), curriculum: cn, standards: c.stds, indicators: c.inds, material: [BK.book.data.school_info, extra?.text].filter(Boolean).join("\n") }), { files: extra?.files }));
   bkSet(b.data, "texts." + k, String(out.text ?? ""));
@@ -826,7 +826,7 @@ const T8 = { sel: new Set() };
 const safeName = (x) => String(x).replace(/[\\/:*?"<>|]/g, "_").trim();
 async function render8() {
   const el = $("#t8");
-  if (!S.course) { el.innerHTML = `<div class="card accent"><h2>8 · ดาวน์โหลด</h2><p>เลือกรายวิชาที่แถบ 2 ก่อน</p><button class="btn" data-act="goto" data-tab="t2">ไปแถบ 2</button></div>`; return; }
+  if (!S.course) { el.innerHTML = `<div class="card accent"><h2>8 · ดาวน์โหลด</h2><p>เลือกรายวิชาที่แถบ 3 ก่อน</p><button class="btn" data-act="goto" data-tab="t2">ไปแถบ 3</button></div>`; return; }
   const ids = S.units.map((u) => u.id);
   const plans = ids.length ? must(await sb.from("lesson_plans").select("*").in("unit_id", ids).order("seq")) : [];
   T8.plans = plans;
@@ -1047,7 +1047,7 @@ const actions = {
     const all = await courseIndicators(), c = S.course;
     const unitInds = all.filter((i) => S.unit.indicator_codes.includes(i.code));
     const have = sum(S.plans.map((p) => num(p.hours))), count = Math.max(0, Math.min(40, num(S.unit.hours) - have));
-    if (!count) throw new Error("ชั่วโมงแผนครบตามหน่วยแล้ว (เพิ่มชั่วโมงของหน่วยในแถบ 3 หรือลบหัวข้อก่อน)");
+    if (!count) throw new Error("ชั่วโมงแผนครบตามหน่วยแล้ว (เพิ่มชั่วโมงของหน่วยในแถบ 4 หรือลบหัวข้อก่อน)");
     toast("AI กำลังวางหัวข้อแผน...");
     const inp = await readIn("ti"); const out = await callAI(promptPlanTitles({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, indicators: unitInds, count, material: inp.text }), { files: inp.files });
     const list = (out.plans ?? []).slice(0, count);
@@ -1290,7 +1290,7 @@ Object.assign(actions, {
     if (!name || !total) throw new Error("กรอกชื่อรายวิชาและชั่วโมงทั้งปี");
     t9Msg("1/5 ดึงมาตรฐานและตัวชี้วัด...");
     const inds = await loadInds(T9.curriculum, T9.subject, T9.grade), stds = await loadStds(T9.curriculum, T9.subject);
-    if (!inds.length) throw new Error("ยังไม่มีตัวชี้วัดของวิชา/ชั้น/หลักสูตรนี้ในระบบ ไปแถบ 1 → 'นำเข้าตัวชี้วัดเอง' ก่อน");
+    if (!inds.length) throw new Error("ยังไม่มีตัวชี้วัดของวิชา/ชั้น/หลักสูตรนี้ในระบบ ไปแถบ 0 → 'นำเข้าตัวชี้วัดเอง' ก่อน");
     const school = S.settings?.school_name ?? "";
     const content = { school_name: school, standards: stds.filter((x) => inds.some((i) => i.standard_code === x.standard_code)), indicators: inds, time: { total_hours: total } };
     const cs = must(await sb.from("curriculum_structures").insert({ subject_id: T9.subject, curriculum_id: T9.curriculum, grade: T9.grade, school_name: school, title: `${name} ป.${T9.grade}`, content }).select().single());
@@ -1317,7 +1317,7 @@ Object.assign(actions, {
   "bk-new": (b) => busy(b, async () => {
     const c = { stds: await loadStds(BK.curriculum, BK.subject) };
     let nInd = 0; for (let g = 1; g <= 6; g++) nInd += (await loadInds(BK.curriculum, BK.subject, g)).length;
-    if (!c.stds.length || !nInd) throw new Error(`ยังไม่มีมาตรฐาน/ตัวชี้วัดของ ${subjName(BK.subject)} (${BK.curriculum}) ในระบบ ไปแถบ 1 → "นำเข้าตัวชี้วัดเอง" วางจากเอกสารหลักสูตรก่อน`); const ab = c.stds[0]?.standard_code?.split(" ")[0] ?? "";
+    if (!c.stds.length || !nInd) throw new Error(`ยังไม่มีมาตรฐาน/ตัวชี้วัดของ ${subjName(BK.subject)} (${BK.curriculum}) ในระบบ ไปแถบ 0 → "นำเข้าตัวชี้วัดเอง" วางจากเอกสารหลักสูตรก่อน`); const ab = c.stds[0]?.standard_code?.split(" ")[0] ?? "";
     const grades = {}; for (let g = 1; g <= 6; g++) grades[g] = { hours: DEF_HOURS[BK.subject]?.[g - 1] ?? 80, code: `${ab}1${g}101`, name: subjName(BK.subject), desc: "", structure: [], core: {} };
     const row = must(await sb.from("curriculum_books").insert({ subject_id: BK.subject, curriculum_id: BK.curriculum, title: `เล่มหลักสูตร ${subjName(BK.subject)}`, data: { texts: {}, grades } }).select().single());
     BK.books.unshift(row); BK.book = row; render0();
@@ -1330,7 +1330,7 @@ Object.assign(actions, {
   "bk-ai-desc": (b) => busy(b, async () => { const c = await bkCtx(); await bkRun([[`คำอธิบายรายวิชา ป.${b.dataset.g}`, () => bkAiDesc(Number(b.dataset.g), c)]]); }),
   "bk-use-course": (b) => busy(b, async () => {
     const g = Number(b.dataset.g), bk = BK.book, own = S.courses.find((x) => x.subject_id === bk.subject_id && x.curriculum_id === bk.curriculum_id && x.grade === g);
-    if (!own) throw new Error(`ยังไม่มีรายวิชา ป.${g} ในแถบ 2`);
+    if (!own) throw new Error(`ยังไม่มีรายวิชา ป.${g} ในแถบ 3`);
     const rows = must(await sb.from("course_structure_rows").select("*").eq("course_structure_id", own.id).order("seq"));
     const gd = (bk.data.grades[g] ??= {}); gd.hours = own.total_hours; if (own.course_code) gd.code = own.course_code; gd.name = own.course_name;
     gd.structure = rows.map((r) => ({ kind: r.kind, name: r.name, indicator_codes: r.indicator_codes ?? [], hours: r.hours, score_weight: r.score_weight, content: r.kind === "exam" ? "" : (r.indicator_codes ?? []).map((cd) => gd.core?.[cd.replace(/\./g, "‧")]).filter(Boolean).join(", ") }));
@@ -1340,7 +1340,7 @@ Object.assign(actions, {
   "read-run": (b) => busy(b, async () => {
     const fs = [...($("#readFiles")?.files ?? [])]; if (!fs.length) throw new Error("เลือกไฟล์ก่อน"); if (fs.length > 10) throw new Error("ไม่เกิน 10 ไฟล์");
     const withPlans = $("#readPlans")?.checked ?? true, c = S.course, inds = await courseIndicators();
-    if (!inds.length) throw new Error("ยังไม่มีตัวชี้วัดของวิชา/ชั้นนี้ในระบบ นำเข้าที่แถบ 1 ก่อน");
+    if (!inds.length) throw new Error("ยังไม่มีตัวชี้วัดของวิชา/ชั้นนี้ในระบบ นำเข้าที่แถบ 0 ก่อน");
     const docs = fs.filter((f) => /\.docx$/i.test(f.name)), media = fs.filter((f) => !/\.docx$/i.test(f.name));
     let parsed = null, docText = "";
     for (const f of docs) { const blocks = await docxBody(f); const r = parseSchedule(blocks, c); if (r) { if (parsed) { parsed.rows.push(...r.rows); parsed.warn.push(...r.warn); } else parsed = r; } else docText += `\n--- ไฟล์ ${f.name} ---\n` + bodyText(blocks); }
@@ -1383,7 +1383,7 @@ Object.assign(actions, {
     await loadRows(); let msg = "บันทึกโครงสร้างแล้ว";
     if (READ.withPlans) {
       await loadUnits();
-      if (S.units.length) msg += " (รายวิชานี้มีหน่วยอยู่แล้ว จึงไม่สร้างหน่วย/แผนซ้ำ ถ้าต้องการให้ลบหน่วยเดิมที่แถบ 3 ก่อน)";
+      if (S.units.length) msg += " (รายวิชานี้มีหน่วยอยู่แล้ว จึงไม่สร้างหน่วย/แผนซ้ำ ถ้าต้องการให้ลบหน่วยเดิมที่แถบ 4 ก่อน)";
       else {
         const urows = rows.filter((r) => r.kind === "unit"); let np = 0;
         for (let i = 0; i < urows.length; i++) {
@@ -1392,7 +1392,7 @@ Object.assign(actions, {
           const ps = (src?.plans ?? []).map((p, k) => ({ unit_id: u.id, seq: k + 1, title: p.title, hours: p.hours, indicator_codes: (p.indicator_codes ?? []).length ? p.indicator_codes : r.indicator_codes, sections: emptySections() }));
           if (ps.length) { must(await sb.from("lesson_plans").insert(ps)); np += ps.length; }
         }
-        await loadUnits(); msg += ` · สร้าง ${urows.length} หน่วย ${np} หัวข้อแผน ไปเขียนแผนที่แถบ 5 ได้เลย`;
+        await loadUnits(); msg += ` · สร้าง ${urows.length} หน่วย ${np} หัวข้อแผน ไปเขียนแผนที่แถบ 6 ได้เลย`;
       }
     }
     READ = null; toast(msg, "ok"); renderT2Edit();
