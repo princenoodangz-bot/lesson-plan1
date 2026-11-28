@@ -1,5 +1,5 @@
 // Paper-style preview of one lesson plan, laid out like the school's original template (12 sections).
-import { SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
+import { parseAttachment, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const lines = (v) => (Array.isArray(v) ? v : String(v ?? "").split(/\r?\n/)).map((l) => String(l).trim()).filter(Boolean);
@@ -13,7 +13,7 @@ export function planPreviewHtml(ctx, plan) {
   const stdCodes = [...new Set(inds.map((i) => i.standard_code))];
   const stdOf = (sc) => ctx.standards.find((s) => s.standard_code === sc);
   const H = (n, t) => `<h4>${n}. ${esc(t)}</h4>`;
-  const ANS = /^[\s\-•–]*\(?\s*ตัวอย่าง/, QST = /^[\s\-•–]*(\d+[.)]\s*)?ครู\s*(ถาม|ตั้งคำถาม|ใช้คำถาม|:)/;
+  const ANS = /^[\s\-•–]*\(?\s*(ตัวอย่าง|นักเรียน\s*ตอบ|คำตอบ)/, QST = /^[\s\-•–]*(\d+[.)]\s*)?ครู\s*(ถาม|ตั้งคำถาม|ใช้คำถาม|:)/;
   const P = (t, cls = "") => `<p class="${cls}">${nl(t)}</p>`;
   const L = (txt, fmt) => lines(txt).map((l, i) => P(fmt ? fmt(l, i) : l, "ind2")).join("");
   const out = [];
@@ -93,7 +93,7 @@ export function planPreviewHtml(ctx, plan) {
 
   (sec.attachments ?? []).forEach((a, i) => {
     if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim()) return;
-    out.push(`<hr><h3 class="c">เอกสารแนบที่ ${i + 1} ${esc(a.title)}</h3>${lines(a.body).map((l) => P(l, "ind0")).join("")}`);
+    out.push(`<hr><h3 class="c">เอกสารแนบที่ ${i + 1} ${esc(a.title)}</h3>${parseAttachment(a.body).map((b) => b.t === "tbl" ? `<table class="pt"><tr>${b.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>${b.rows.map((r) => `<tr>${r.map((c, k) => `<td${k === 0 && b.head.length === 3 ? ' class="c"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>` : P(b.text, "ind0")).join("")}`);
   });
   const html = out.join("").replace(/>([^<]*)</g, (m, t) => ">" + th(t) + "<");
   return `<div class="paper">${html}</div>`;

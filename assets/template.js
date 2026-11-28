@@ -117,7 +117,7 @@ ${lines(indicators)}
 
 กระบวนการจัดการเรียนรู้ใช้ 5 ขั้น ตามลำดับ: ${PROCESS_STEPS.join(" / ")}
 รูปแบบจุดประสงค์: ด้านความรู้ (K) ด้านทักษะกระบวนการ (P) ด้านคุณลักษณะ (A) ลงท้ายด้วย (K) (P) (A) ตามลำดับ
-ในแต่ละขั้นเขียนเป็นข้อ ๆ ขึ้นต้นด้วยเลขข้อ มีคำถามและตัวอย่างคำตอบของนักเรียนเมื่อเหมาะสม
+ในแต่ละขั้นเขียนเป็นข้อ ๆ ขึ้นต้นด้วยเลขข้อ และทุกขั้นต้องมีบทสนทนาครูถาม-นักเรียนตอบ อย่างน้อย 1 คู่ รูปแบบบรรทัดแยกเสมอ:\n- ครูถามว่า: "..."\n- ตัวอย่างคำตอบของนักเรียน: "..."
 การวัดและประเมินผลต้องมี 4 รายการ: พุทธิพิสัย (K), ทักษะ/กระบวนการ (P), จิตพิสัย (A), คุณลักษณะอันพึงประสงค์
 คุณลักษณะอันพึงประสงค์ เลือกจากรายการนี้เท่านั้น: ${TRAITS.join(", ")}
 
@@ -157,6 +157,7 @@ ${lines(indicators)}
 เนื้อหาปัจจุบัน:
 ${current || "(ว่าง)"}
 ${instruction ? "คำสั่งเพิ่มเติมจากครู: " + instruction : ""}
+ถ้าเป็นขั้นตอนการจัดการเรียนรู้ ต้องมีครูถาม-นักเรียนตอบ เป็นบรรทัดแยก: - ครูถามว่า: "..." และ - ตัวอย่างคำตอบของนักเรียน: "..."
 ตอบเป็น JSON เท่านั้น: {"text":"เนื้อหาใหม่ ใช้ \\n แยกบรรทัด"}`;
 }
 
@@ -168,7 +169,7 @@ export function promptAttachments({ subject, grade, unit, plan, indicators }) {
 ${lines(indicators)}
 สาระสำคัญ: ${plan.sections?.key_idea || "-"}
 ใบงาน: มีชื่อ-ชั้น-เลขที่ คำชี้แจง และข้อคำถาม 5-8 ข้อที่ตรงกับตัวชี้วัด
-รูบริก: 3-4 เกณฑ์ ระดับคะแนน 4/3/2/1 พร้อมคำอธิบายแต่ละระดับ
+รูบริก: ระดับคะแนน 4/3/2/1 พร้อมคำอธิบายแต่ละระดับ เขียนบรรทัดละระดับ รูปแบบ "ระดับ 4 (ดีเยี่ยม): คำอธิบาย" (ระบบจะแสดงเป็นตาราง)
 ตอบเป็น JSON เท่านั้น: {"attachments":[{"title":"ใบงาน เรื่อง ...","body":"ข้อความหลายบรรทัด ใช้ \\n แยกบรรทัด"},{"title":"เกณฑ์การให้คะแนน (รูบริก)","body":"..."}]}`;
 }
 
@@ -278,4 +279,22 @@ export function promptPlanFill(args) {
 ${JSON.stringify(current).slice(0, 8000)}${withMaterial(material)}
 กฎ: 1) ข้อมูลของครูมาก่อน ใช้ตามที่ให้ 2) ช่องที่ครูไม่ได้ให้ ให้เขียนเติมให้สอดคล้องกับตัวชี้วัดและเรื่องของแผน 3) ห้ามสร้างรหัสตัวชี้วัดใหม่
 เพิ่มสองคีย์ใน JSON: "assumptions": [สิ่งที่คุณสันนิษฐานเองเพราะครูไม่ได้ให้ ให้ครูตรวจ], "questions": [สิ่งที่ครูควรให้ข้อมูลเพิ่มเพื่อให้แผนแม่นยำขึ้น (ถ้ามี)]`;
+}
+
+// attachment body -> blocks: paragraphs and tables (rubric lines "ระดับ 4 (ดีเยี่ยม): ..." or "a | b | c" rows)
+export function parseAttachment(body) {
+  const L = String(body ?? "").split(/\r?\n/).map((x) => x.replace(/\s+$/, ""));
+  const rub = /^\s*ระดับ(?:คะแนน)?\s*([0-9๐-๙]+)\s*(?:\(([^)]*)\))?\s*[:：-]\s*(.+)$/;
+  const out = []; let i = 0;
+  while (i < L.length) {
+    if (rub.test(L[i])) { const rows = []; while (i < L.length && rub.test(L[i])) { const m = L[i].match(rub); rows.push([m[1], m[2] ?? "", m[3]]); i++; }
+      if (rows.length >= 2) { out.push({ t: "tbl", head: ["ระดับ", "ระดับคุณภาพ", "เกณฑ์การให้คะแนน"], rows, w: [2.0, 3.0, 11.0] }); continue; }
+      out.push({ t: "p", text: `ระดับ ${rows[0][0]}${rows[0][1] ? ` (${rows[0][1]})` : ""}: ${rows[0][2]}` }); continue; }
+    if ((L[i].match(/\|/g) ?? []).length >= 1 && L[i].trim().includes("|")) { const g = []; while (i < L.length && L[i].includes("|")) { g.push(L[i].split("|").map((c) => c.trim()).filter((c, k, a) => !(c === "" && (k === 0 || k === a.length - 1)))); i++; }
+      const rows = g.filter((r) => !r.every((c) => /^[-:\s]+$/.test(c))), n = Math.max(...rows.map((r) => r.length));
+      if (rows.length >= 2 && n >= 2) { out.push({ t: "tbl", head: rows[0], rows: rows.slice(1).map((r) => Array.from({ length: n }, (_, k) => r[k] ?? "")), w: Array.from({ length: n }, () => 16 / n) }); continue; }
+      rows.forEach((r) => out.push({ t: "p", text: r.join(" | ") })); continue; }
+    if (L[i].trim()) out.push({ t: "p", text: L[i] }); i++;
+  }
+  return out;
 }

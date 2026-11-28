@@ -1,6 +1,6 @@
 // Word (.docx) export that follows the school's original plan layout:
 // A4, margins L3.17 R1.75 T2.30 B1.50 cm, TH SarabunIT๙ 16.5/16 pt, 12 numbered sections, 4-column assessment table.
-import { SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
+import { parseAttachment, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
 
 const DOCX_CDN = "https://cdn.jsdelivr.net/npm/docx@9.16.1/+esm";
 const FONT = "TH SarabunIT๙";
@@ -104,7 +104,7 @@ export async function buildDoc(ctx, plans) {
     out.push(head(9, SECTIONS[8].title));
     PROCESS_STEPS.forEach((st, i) => {
       out.push(para(st, { bold: true, underline: true, keepNext: true }));
-      lines(sec.process?.[i]).forEach((l) => out.push(/^[\s\-•–]*\(?\s*ตัวอย่าง/.test(l) ? body(l, { left: cm(1.2), italics: true, color: "D6336C" }) : /^[\s\-•–]*(\d+[.)]\s*)?ครู\s*(ถาม|ตั้งคำถาม|ใช้คำถาม|:)/.test(l) ? body(l, { left: cm(0.9), color: "1F5FBF" }) : body(l, { left: cm(0.6) })));
+      lines(sec.process?.[i]).forEach((l) => out.push(/^[\s\-•–]*\(?\s*(ตัวอย่าง|นักเรียน\s*ตอบ|คำตอบ)/.test(l) ? body(l, { left: cm(1.2), italics: true, color: "D6336C" }) : /^[\s\-•–]*(\d+[.)]\s*)?ครู\s*(ถาม|ตั้งคำถาม|ใช้คำถาม|:)/.test(l) ? body(l, { left: cm(0.9), color: "1F5FBF" }) : body(l, { left: cm(0.6) })));
     });
 
     // 10
@@ -165,7 +165,13 @@ export async function buildDoc(ctx, plans) {
     (sec.attachments ?? []).forEach((a, ai) => {
       if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim()) return;
       out.push(para(`เอกสารแนบที่ ${ai + 1}  ${a.title ?? ""}`, { bold: true, align: AlignmentType.CENTER, pageBreakBefore: true, line: 240 }));
-      String(a.body ?? "").split(/\r?\n/).forEach((l) => out.push(para(l, { indent: { left: cm(0.6) } })));
+      parseAttachment(a.body).forEach((b) => {
+        if (b.t === "p") return out.push(para(b.text, { indent: { left: cm(0.6) } }));
+        const hdr = new TableRow({ tableHeader: true, children: b.head.map((t, i) => cell([para(t, { bold: true, align: AlignmentType.CENTER })], b.w[i], { fill: "F2F2F2" })) });
+        const rws = b.rows.map((r) => new TableRow({ cantSplit: true, children: r.map((t, i) => cell([para(t, i === 0 && b.head.length === 3 ? { align: AlignmentType.CENTER } : {})], b.w[i])) }));
+        out.push(new Table({ width: { size: cm(b.w.reduce((x, y) => x + y)), type: WidthType.DXA }, columnWidths: b.w.map(cm), rows: [hdr, ...rws], layout: TableLayoutType.FIXED }));
+        out.push(para(""));
+      });
     });
     return out;
   };
