@@ -183,6 +183,25 @@ function parseCurriculumText(text, grade) {
   const seen = new Set(), out = inds.filter((i) => !seen.has(i.code) && seen.add(i.code));
   return { standards: [...stds].map(([standard_code, description]) => ({ standard_code, description, strand_no: strandOf.get(standard_code)?.no ?? null, strand_name: strandOf.get(standard_code)?.name || null })), indicators: out };
 }
+
+// ---- fetch curriculum indicators on demand (when the selected subject/grade has none in the DB)
+const SRC_DOCS = { "ภาษาไทย": ["1KbyMm1nmBCeXTmvaEBd11XdNC1Kg6E3S", [22, 27, 31, 33, 33, 34]], "คณิตศาสตร์": ["1md7-JRZlSwKme8-BrMW6jSaCRVN6tBA3", [10, 16, 28, 22, 19, 21]], "วิทยาศาสตร์": ["1WHgfLEJniuNNSfvbX9VaEOmDaOlwqlOG", [15, 16, 25, 21, 32, 30]], "สังคม": ["1RFmH-pgQqVpbb-btPDAayeNss6DOTu2Y", [31, 34, 39, 38, 36, 39]], "ภาษาต่างประเทศ": ["19H6_GHYUfxnq6p3zb5KeAtTVAu0EAVVB", [16, 16, 18, 20, 20, 20]] };
+function srcFor(name) { const k = Object.keys(SRC_DOCS).find((x) => String(name).includes(x)); return k ? { url: `https://docs.google.com/document/d/${SRC_DOCS[k][0]}/export?format=pdf`, expect: SRC_DOCS[k][1] } : null; }
+async function fetchOfficial(subject, grade, curriculum) {
+  const name = subjName(subject), src = srcFor(name);
+  const cn = curriculum === "2551r60" ? "หลักสูตรแกนกลางการศึกษาขั้นพื้นฐาน พ.ศ. 2551 (ฉบับปรับปรุง พ.ศ. 2560)" : `หลักสูตร ${curriculum}`;
+  const prompt = `ไปอ่านเอกสาร "มาตรฐานการเรียนรู้และตัวชี้วัด" กลุ่มสาระ${name} ของ${cn} ของ สพฐ./สสวท. ${src ? "เริ่มจากเอกสารนี้: " + src.url + " (ถ้าเปิดไม่ได้ให้ค้นเว็บหาเอกสารทางการ)" : "ค้นเว็บหาเอกสารทางการ (academic.obec.go.th, ipst.ac.th)"}
+คัดลอกเฉพาะ ชั้นประถมศึกษาปีที่ ${grade} เป็นข้อความล้วน ห้ามแก้ไข ห้ามสรุป ห้ามแต่งเพิ่ม ถ้าหาไม่พบให้ตอบว่า NOTFOUND
+รูปแบบ (ขึ้นบรรทัดใหม่ทุกสาระ มาตรฐาน และตัวชี้วัด):
+สาระที่ N ชื่อสาระ
+มาตรฐาน ท 1.1 ข้อความมาตรฐาน
+ป.${grade}/1 ข้อความตัวชี้วัด (ระหว่างทาง|ปลายทาง ถ้าเอกสารระบุ)
+ไม่ต้องมีคำอธิบายอื่น`;
+  const text = await callAI(prompt, { json: false, system: "คุณคัดลอกข้อความจากเอกสารหลักสูตรทางการตามต้นฉบับเท่านั้น", grounding: true });
+  if (/NOTFOUND/.test(text) && !/ป\.?\s*\d\s*\/\s*\d/.test(text)) return null;
+  const r = parseCurriculumText(text, grade);
+  return r.indicators.length ? { ...r, expect: src?.expect?.[grade - 1] ?? null } : null;
+}
 let IMP = null;
 async function indicatorsFor(cs) {
   if (!cs) return [];
@@ -222,12 +241,12 @@ function drawQuota() {
   el.innerHTML = `<span class="small">AI ${used}/${lim}</span>${qBar(used, lim, 8)}${pct >= 1 ? '<span class="pill bad">เต็ม</span>' : ""}`;
 }
 async function refreshQuota() { try { S.keys = must(await sb.from("api_keys").select(KEYCOLS).order("priority").order("created_at")); drawQuota(); } catch {} }
-async function callAI(prompt, { json = true, system = SYSTEM_PROMPT, files } = {}) {
+async function callAI(prompt, { json = true, system = SYSTEM_PROMPT, files, grounding } = {}) {
   const { data: { session } } = await sb.auth.getSession();
   const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY },
-    body: JSON.stringify({ prompt, system, json, files }),
+    body: JSON.stringify({ prompt, system, json: grounding ? false : json, files, grounding: grounding || undefined }),
   });
   const out = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -385,7 +404,7 @@ function render1() {
       <label>หลักสูตร<select id="t1c">${S.curricula.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></label>
       <label>ชั้น<select id="t1g">${[1, 2, 3, 4, 5, 6].map((g) => `<option value="${g}">ป.${g}</option>`).join("")}</select></label>
     </div>
-    <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t1-load">ดึงมาตรฐานและตัวชี้วัด</button></div>
+    <div class="row" style="margin-top:10px"><button class="btn primary" id="t1load" data-act="t1-load">ดึงมาตรฐานและตัวชี้วัด</button></div>
   </div>
   <div id="t1prev"></div>
   <details class="card"><summary><b>นำเข้าตัวชี้วัดเอง</b> <span class="muted small">— สำหรับวิชา/ชั้น/หลักสูตรที่ยังไม่มีในระบบ</span></summary>
@@ -397,7 +416,8 @@ function render1() {
   <div class="card"><h3>โครงสร้างหลักสูตรที่บันทึกไว้</h3><div id="t1list" class="list"></div></div>`;
   $("#t1s").value = T1.subject; $("#t1c").value = T1.curriculum; $("#t1g").value = T1.grade;
   ["t1s", "t1c", "t1g"].forEach((id) => $("#" + id).addEventListener("change", () => {
-    T1.subject = Number($("#t1s").value); T1.curriculum = $("#t1c").value; T1.grade = Number($("#t1g").value); T1.ind = null; $("#t1prev").innerHTML = "";
+    T1.subject = Number($("#t1s").value); T1.curriculum = $("#t1c").value; T1.grade = Number($("#t1g").value); T1.ind = null; T1.fetched = null; T1.fetchErr = null; $("#t1prev").innerHTML = "";
+    actions["t1-load"]($("#t1load") ?? document.createElement("button"));
   }));
   renderT1Prev(); renderT1List();
 }
@@ -412,12 +432,15 @@ function renderT1Prev() {
   const box = $("#t1prev"); if (!box || !T1.ind) return;
   if (!T1.ind.length) {
     box.innerHTML = `<div class="card"><b>ยังไม่มีข้อมูลตัวชี้วัดของ ${esc(subjName(T1.subject))} ป.${T1.grade} (${esc(T1.curriculum)}) ในระบบ</b>
-      <p class="muted">ต้องนำเข้าก่อนจึงจะสร้างโครงสร้างได้ ใช้ช่อง “นำเข้าตัวชี้วัดเอง” ด้านล่าง (วางข้อความจากเอกสารหลักสูตร) ตอนนี้มีข้อมูลสำเร็จรูปเฉพาะสุขศึกษาและพลศึกษา ป.1-6 หลักสูตร 2551 ปรับปรุง 2560</p></div>`;
+      <p class="muted">${T1.fetchErr ? `<span style="color:var(--red)">ดึงอัตโนมัติไม่สำเร็จ: ${esc(T1.fetchErr)}</span><br>` : ""}ต้องนำเข้าก่อนจึงจะสร้างโครงสร้างได้ ใช้ช่อง “นำเข้าตัวชี้วัดเอง” ด้านล่าง (วางข้อความจากเอกสารหลักสูตร) ตอนนี้มีข้อมูลสำเร็จรูปเฉพาะสุขศึกษาและพลศึกษา ป.1-6 หลักสูตร 2551 ปรับปรุง 2560</p></div>`;
     return;
   }
   const by = {}; T1.ind.forEach((i) => (by[i.standard_code] ??= []).push(i));
+  const F = T1.fetched, okN = F && F.expect != null ? F.indicators.length === F.expect : null;
+  const fetchBox = F ? `<div class="${okN === false ? "errbox" : "warnbox"}"><b>ดึงจากเอกสารหลักสูตรออนไลน์ — ต้องตรวจก่อนใช้</b><br>ได้ ${F.indicators.length} ตัวชี้วัด${F.expect != null ? ` (ตารางสรุปของเอกสารระบุ ${F.expect} ${okN ? "— ตรงกัน" : "— ไม่ตรง อาจขาดหรือเกิน ตรวจรายการด้านล่าง"})` : " (ไม่มีจำนวนอ้างอิง)"}
+    <div class="row" style="margin-top:8px"><button class="btn primary" data-act="t1-fetch-save">ตรวจแล้ว บันทึกไว้ใช้ครั้งต่อไป</button><button class="btn" data-act="t1-load">ดึงใหม่</button></div></div>` : "";
   const title = `โครงสร้างหลักสูตร ${subjName(T1.subject)} ป.${T1.grade}`;
-  box.innerHTML = `<div class="card">
+  box.innerHTML = `${fetchBox}<div class="card">
     <h3>มาตรฐานและตัวชี้วัด (${T1.ind.length} ตัวชี้วัด)</h3>
     ${Object.entries(by).map(([sc, list]) => `<details class="sec" open><summary>มาตรฐาน ${esc(sc)} ${esc(T1.std[sc]?.description ?? "")}</summary><div class="body">
       <div class="tablewrap"><table><tr><th style="width:130px">รหัส</th><th>ตัวชี้วัด</th><th style="width:110px">ประเภท</th></tr>
@@ -997,9 +1020,29 @@ const actions = {
     T1.std = Object.fromEntries((await loadStds(T1.curriculum, T1.subject)).map((x) => [x.standard_code, x])); renderT1Prev();
   }),
   "t1-load": (b) => busy(b, async () => {
+    const key = `${T1.curriculum}|${T1.subject}|${T1.grade}`;
     T1.ind = await loadInds(T1.curriculum, T1.subject, T1.grade);
     T1.std = Object.fromEntries((await loadStds(T1.curriculum, T1.subject)).map((x) => [x.standard_code, x]));
+    T1.fetched = null; T1.fetchErr = null;
+    if (!T1.ind.length) {
+      toast("ยังไม่มีในระบบ กำลังไปดึงจากเอกสารหลักสูตร (ครั้งแรกใช้เวลาสักครู่)");
+      try {
+        const r = await fetchOfficial(T1.subject, T1.grade, T1.curriculum);
+        if (key !== `${T1.curriculum}|${T1.subject}|${T1.grade}`) return;
+        if (r) { T1.fetched = r; T1.ind = r.indicators; T1.std = Object.fromEntries(r.standards.map((x) => [x.standard_code, x])); }
+        else T1.fetchErr = "ไม่พบเอกสารต้นทางของวิชา/หลักสูตรนี้";
+      } catch (e) { T1.fetchErr = e.message; }
+    }
     renderT1Prev();
+  }),
+  "t1-fetch-save": (b) => busy(b, async () => {
+    const r = T1.fetched; if (!r) return;
+    const base = { owner_id: S.user.id, curriculum_id: T1.curriculum, subject_id: T1.subject };
+    const stdRows = r.standards.map((x) => ({ ...base, standard_code: x.standard_code, description: x.description, strand_no: x.strand_no, strand_name: x.strand_name }));
+    const indRows = r.indicators.map((i) => ({ ...base, grade: i.grade, standard_code: i.standard_code, code: i.code, description: i.description, kind: i.kind }));
+    if (stdRows.length) must(await sb.from("user_standards").upsert(stdRows, { onConflict: "owner_id,curriculum_id,subject_id,standard_code" }));
+    must(await sb.from("user_indicators").upsert(indRows, { onConflict: "owner_id,curriculum_id,subject_id,grade,code" }));
+    S.indCache = {}; T1.fetched = null; toast(`บันทึกตัวชี้วัด ${indRows.length} ข้อแล้ว ครั้งต่อไปไม่ต้องดึงใหม่`, "ok"); renderT1Prev();
   }),
   "t1-save": (b) => busy(b, async () => {
     const total = num($("#t1total").value), week = num($("#t1week").value);
