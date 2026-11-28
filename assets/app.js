@@ -777,7 +777,7 @@ async function renderPlanEditor() {
     <details class="sec"><summary>7. ${SECTIONS[6].title}</summary><div class="body">${SUFFICIENCY.map(([k, l]) => ta("sufficiency." + k, l, 2)).join("")}</div></details>
     <details class="sec"><summary>8. ${SECTIONS[7].title}</summary><div class="body"><b>3Rs</b>${chk("focus.r3", R3)}<b>8Cs</b>${chk("focus.c8", C8)}</div></details>
     <details class="sec"><summary>9. ${SECTIONS[8].title}</summary><div class="body">${PROCESS_STEPS.map((s, i) => ta("process." + i, s, 6)).join("")}</div></details>
-    <details class="sec"><summary>10. ${SECTIONS[9].title}</summary><div class="body">${ta("media", "สื่อการเรียนการสอน (หนึ่งบรรทัดต่อหนึ่งข้อ)", 3)}<div class="row"><button type="button" class="btn small accent" data-act="t4-media-kit">📋 เตรียมคำสั่งสร้างสื่อทุกชิ้น (คัดลอกไปสร้าง)</button></div>${mediaKitPanel(sec)}</div></details>
+    <details class="sec"><summary>10. ${SECTIONS[9].title}</summary><div class="body">${ta("media", "สื่อการเรียนการสอน (หนึ่งบรรทัดต่อหนึ่งข้อ)", 3)}</div></details>
     <details class="sec"><summary>11. ${SECTIONS[10].title}</summary><div class="body">${ta("resources.inside", "แหล่งเรียนรู้ภายในโรงเรียน", 2)}${ta("resources.outside", "แหล่งเรียนรู้ภายนอกห้องเรียน", 2)}${ta("resources.local", "ภูมิปัญญาท้องถิ่น", 2)}</div></details>
     <details class="sec"><summary>12. ${SECTIONS[11].title}</summary><div class="body"><div class="tablewrap"><table><tr><th>รายการประเมิน</th><th>วิธีการวัด</th><th>เครื่องมือวัด</th><th>เกณฑ์การประเมินผล</th><th></th></tr>
       ${sec.assessment.map((a, i) => `<tr><td><input data-p="assessment.${i}.item" value="${esc(a.item)}"></td><td><textarea data-p="assessment.${i}.method" rows="2">${esc(a.method)}</textarea></td><td><textarea data-p="assessment.${i}.tool" rows="2">${esc(a.tool)}</textarea></td><td><textarea data-p="assessment.${i}.criteria" rows="2">${esc(a.criteria)}</textarea></td><td><button class="btn small danger" data-act="t4-as-del" data-i="${i}">✕</button></td></tr>`).join("")}</table></div><button class="btn small" data-act="t4-as-add">+ เพิ่มรายการประเมิน</button></div></details>
@@ -790,6 +790,9 @@ async function renderPlanEditor() {
         <button class="btn small danger" data-act="t4-att-del" data-i="${i}">ลบเอกสารนี้</button></div>`).join("") || '<div class="muted">ยังไม่มีเอกสารแนบ</div>'}
       <div class="card" style="padding:10px;border-style:dashed"><b class="small">🧾 สร้างใบงาน (ข้อความ + คำสั่งสร้างรูป + เฉลย)</b><div class="row" style="margin-top:6px"><label class="small" style="flex-direction:row;gap:6px;align-items:center">จำนวนข้อ<input type="number" id="wsN" value="7" min="3" max="12" style="width:70px"></label><label class="small" style="flex-direction:row;gap:6px;align-items:center">สี<select id="wsTheme" style="width:auto"><option value="blue">ฟ้า</option><option value="pink">ชมพู</option><option value="green">เขียว</option><option value="orange">ส้ม</option><option value="purple">ม่วง</option></select></label><input id="wsExtra" placeholder="ข้อความเพิ่มเติม (ถ้ามี) เช่น เน้นข้อวาดภาพ" style="flex:1;min-width:180px"><button class="btn small primary" data-act="t4-ws">✨ สร้างใบงาน</button></div></div>
       <div class="row"><button class="btn small" data-act="t4-att-add">+ เพิ่มเอกสารแนบ</button><button class="btn small accent" data-act="t4-att-ai">✨ AI ร่างใบงาน + รูบริก</button></div></div></details>
+    <details class="sec" ${(sec.media_kit ?? []).length ? "open" : ""}><summary>14. สื่อพร้อมสร้าง / พร้อมใช้งาน <span class="muted small">— คำสั่งคัดลอกไปสร้างสื่อ + แนบรูปที่ได้ต่อท้าย Word</span></summary><div class="body">
+      <p class="muted small">ระบบอ่านรายการสื่อในข้อ 10 แล้วเตรียมคำสั่งให้ทีละชิ้น คัดลอกไปสร้างใน ChatGPT/Gemini แล้วนำรูปที่ได้มาแนบกลับที่นี่</p>
+      <div class="row"><button type="button" class="btn small accent" data-act="t4-media-kit">📋 เตรียมคำสั่งสร้างสื่อทุกชิ้น (คัดลอกไปสร้าง)</button></div>${mediaKitPanel(sec)}</div></details>
     <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t4-save">บันทึกแผนนี้</button><button class="btn" data-act="t4-save-next">บันทึกและไปแผนถัดไป →</button></div>
   </div>`;
 }
@@ -1085,7 +1088,7 @@ const actions = {
     const out = await callAI(promptMediaKit({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: S.plan, indicators: all.filter((i) => S.plan.indicator_codes.includes(i.code)), media }));
     if (!Array.isArray(out.items) || !out.items.length) throw new Error("AI ตอบไม่ครบ ลองใหม่");
     S.plan.sections.media_kit = out.items.map((x) => ({ name: String(x.name ?? ""), type: String(x.type ?? "อื่นๆ"), content: stripQA(x.content ?? ""), prompt: String(x.prompt ?? "") }));
-    await savePlan(); renderPlanEditor(); toast("เตรียมคำสั่งสร้างสื่อแล้ว เลื่อนดูใต้ช่องสื่อ", "ok");
+    await savePlan(); renderPlanEditor(); toast("เตรียมคำสั่งสร้างสื่อแล้ว ดูที่ข้อ 14", "ok");
   }),
   "t4-media-att": (b) => busy(b, async () => {
     collectPlan(); const k = S.plan.sections.media_kit[Number(b.dataset.i)];
@@ -1806,7 +1809,7 @@ document.addEventListener("change", async (e) => {
     collectPlan(); const k = S.plan.sections.media_kit[Number(inp.dataset.mkimg)], atts = S.plan.sections.attachments;
     let a = atts.find((x) => x.title === k.name && (x.images ?? []).length); if (!a) { a = { title: k.name, body: "", images: [] }; atts.push(a); }
     for (const f of [...inp.files]) a.images.push(await imgToData(f, 1800));
-    await savePlan(); renderPlanEditor(); toast(`แนบรูปเป็นเอกสารแนบท้ายแผนแล้ว ${inp.files.length} รูป (ดูที่ข้อ 13 และพรีวิว)`, "ok");
+    await savePlan(); renderPlanEditor(); toast(`แนบรูปเป็นเอกสารแนบท้ายแผนแล้ว ${inp.files.length} รูป (ดูที่ข้อ 13/14 และพรีวิว)`, "ok");
   } catch (err) { toast(err.message ?? String(err), "err"); }
 });
 async function imgToData(file, max = 1500) {
