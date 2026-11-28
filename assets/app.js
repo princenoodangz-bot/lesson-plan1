@@ -1,7 +1,7 @@
 const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 import {
-  SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
+  withMaterial, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
   emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptWorksheetImage, promptWorksheetFromText, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
 } from "./template.js";
 
@@ -404,9 +404,9 @@ const optList = (arr, val, label) => arr.map((o) => `<option value="${esc(o[val]
 
 function render1() {
   const el = $("#t1");
-  el.innerHTML = `
+  el.innerHTML = `<div id="schBox"></div>
   <div class="card accent">
-    <h2>0 · โครงสร้างหลักสูตรสถานศึกษา</h2>
+    <h2>0 · โครงสร้างหลักสูตรวิชา (ตัวชี้วัดและเวลาเรียนของวิชา)</h2>
     <p class="muted">เลือกวิชา ชั้น และหลักสูตร ระบบจะดึงมาตรฐานและตัวชี้วัดจริงจากฐานข้อมูลหลักสูตร (ไม่ให้ AI เดา)</p>
     <div class="grid">
       <label>กลุ่มสาระ/วิชา<select id="t1s">${optList(S.subjects, "id", "name")}</select></label>
@@ -429,6 +429,7 @@ function render1() {
     actions["t1-load"]($("#t1load") ?? document.createElement("button"));
   }));
   renderT1Prev(); renderT1List();
+  schLoad().then(renderSchool).catch((e) => toast(e.message, "err"));
 }
 function renderT1List() {
   $("#t1list").innerHTML = S.curStructs.length ? S.curStructs.map((c) => `
@@ -437,6 +438,59 @@ function renderT1List() {
       <div class="row"><button class="btn small primary" data-act="t1-use" data-id="${c.id}">ใช้ต่อ → แถบ 3</button><button class="btn small danger" data-act="t1-del" data-id="${c.id}">ลบ</button></div>
     </div>`).join("") : '<div class="muted">ยังไม่มี</div>';
 }
+
+// =====================================================================
+// TAB 0 (top part) — school curriculum structure, built part by part
+// =====================================================================
+const SCH = { cur: null, data: null };
+const SCH_LETTER = [["ไทย", "ท"], ["คณิต", "ค"], ["วิทยาศาสตร์", "ว"], ["สังคม", "ส"], ["สุขศึกษา", "พ"], ["ศิลปะ", "ศ"], ["การงาน", "ง"], ["ต่างประเทศ", "อ"]];
+const schLetter = (n) => SCH_LETTER.find(([k]) => String(n).includes(k))?.[1] ?? "?";
+// starting values only (NOT official): teacher must check against the school's own curriculum book
+const SCH_DEF = [["ไทย", 200, 160], ["คณิต", 200, 160], ["วิทยาศาสตร์", 80, 80], ["สังคม", 80, 80], ["สุขศึกษา", 80, 80], ["ศิลปะ", 80, 80], ["การงาน", 40, 40], ["ต่างประเทศ", 40, 80]];
+const schDefTime = () => Object.fromEntries(S.subjects.map((sj) => { const d = SCH_DEF.find(([k]) => sj.name.includes(k)); return [sj.id, [0, 1, 2, 3, 4, 5].map((g) => d ? d[g < 3 ? 1 : 2] : 0)]; }));
+const schDefActs = () => [["แนะแนว", 40], ["ลูกเสือ/เนตรนารี/ยุวกาชาด", 40], ["ชุมนุม", 20], ["กิจกรรมเพื่อสังคมและสาธารณประโยชน์", 20]].map(([name, h]) => ({ name, h: [h, h, h, h, h, h] }));
+async function schLoad() {
+  if (SCH.cur === T1.curriculum && SCH.data) return;
+  const r = must(await sb.from("school_structures").select("data").eq("curriculum_id", T1.curriculum).maybeSingle());
+  SCH.cur = T1.curriculum; SCH.data = r?.data?.time ? r.data : { time: schDefTime(), acts: schDefActs(), courses: [], draft: true };
+}
+const schSum = (g) => ({ sub: Object.values(SCH.data.time).reduce((a, h) => a + (Number(h[g]) || 0), 0), act: SCH.data.acts.reduce((a, x) => a + (Number(x.h[g]) || 0), 0) });
+function schTotals() {
+  for (let g = 0; g < 6; g++) { const t = schSum(g), tot = t.sub + t.act, c = $(`#schTot${g}`); if (c) { c.innerHTML = `${t.sub}<br>+${t.act}<br><b>${tot}</b>`; c.style.color = tot > 1000 ? "var(--red)" : ""; } }
+}
+function renderSchool() {
+  const box = $("#schBox"); if (!box || !SCH.data) return; const D = SCH.data;
+  const num = (v, a) => `<input type="number" min="0" ${a} value="${v}" style="width:64px;padding:2px 4px">`;
+  const th = [1, 2, 3, 4, 5, 6].map((g) => `<th>ป.${g}</th>`).join("");
+  box.innerHTML = `<div class="card accent"><h2>โครงสร้างหลักสูตรสถานศึกษา — ทำทีละส่วน</h2>
+    ${D.draft ? '<div class="warnbox">ตัวเลขเริ่มต้นเป็นค่าตัวอย่าง ไม่ใช่ค่าทางการ แก้ให้ตรงกับหลักสูตรโรงเรียนของคุณแล้วกดบันทึก</div>' : ""}
+    <details class="sec" open><summary><b>ส่วนที่ 1 · เวลาเรียนรายปี (ชั่วโมง/ปี) ของแต่ละกลุ่มสาระ</b></summary><div class="body">
+      ${inBox("sch1", "เช่น โรงเรียนใช้เวลาเรียนไทย 200 คณิต 200 ... หรือวางตารางเวลาเรียนของโรงเรียน")}
+      <div class="tablewrap"><table><tr><th>กลุ่มสาระ</th>${th}</tr>
+      ${S.subjects.map((sj) => `<tr><td>${esc(sj.name)}</td>${[0, 1, 2, 3, 4, 5].map((g) => `<td>${num(D.time[sj.id]?.[g] ?? 0, `data-sch="t" data-s="${sj.id}" data-g="${g}"`)}</td>`).join("")}</tr>`).join("")}
+      <tr><td>รวมกลุ่มสาระ<br>+กิจกรรมฯ<br><b>รวมทั้งหมด</b> <span class="small muted">(ไม่เกิน 1,000)</span></td>${[0, 1, 2, 3, 4, 5].map((g) => `<td id="schTot${g}"></td>`).join("")}</tr></table></div>
+      <div class="row" style="margin-top:8px"><button class="btn small accent" data-act="sch-ai1">✨ ให้ AI ร่าง/เติมส่วนนี้</button><button class="btn small" data-act="sch-reset1">ใช้ค่าตัวอย่างใหม่</button><button class="btn small primary" data-act="sch-save">บันทึก</button></div></div></details>
+    <details class="sec"><summary><b>ส่วนที่ 2 · กิจกรรมพัฒนาผู้เรียน</b></summary><div class="body">
+      ${inBox("sch2", "เช่น กิจกรรมที่โรงเรียนจัด ชั่วโมงต่อปีของแต่ละชั้น")}
+      <div class="tablewrap"><table><tr><th>กิจกรรม</th>${th}<th></th></tr>
+      ${D.acts.map((a, i) => `<tr><td><input value="${esc(a.name)}" data-sch="an" data-i="${i}"></td>${[0, 1, 2, 3, 4, 5].map((g) => `<td>${num(a.h[g] ?? 0, `data-sch="ah" data-i="${i}" data-g="${g}"`)}</td>`).join("")}<td><button class="btn small danger" data-act="sch-act-del" data-i="${i}">ลบ</button></td></tr>`).join("")}</table></div>
+      <div class="row" style="margin-top:8px"><button class="btn small" data-act="sch-act-add">+ เพิ่มกิจกรรม</button><button class="btn small accent" data-act="sch-ai2">✨ ให้ AI ร่าง/เติมส่วนนี้</button><button class="btn small primary" data-act="sch-save">บันทึก</button></div></div></details>
+    <details class="sec"><summary><b>ส่วนที่ 3 · รายวิชาพื้นฐาน (รหัสวิชา ชื่อ ชั่วโมง)</b></summary><div class="body">
+      <p class="muted small">สร้างจากเวลาในส่วนที่ 1 แล้วแก้รหัส/ชื่อได้ รหัสตัวอย่าง ท15101 = ท + ประถม(1) + ชั้น(5) + พื้นฐาน(1) + ลำดับ(01)</p>
+      <div class="row"><button class="btn small accent" data-act="sch-gen3">สร้างรายวิชาจากส่วนที่ 1</button><button class="btn small primary" data-act="sch-save">บันทึก</button></div>
+      ${D.courses.length ? `<div class="tablewrap"><table><tr><th>ชั้น</th><th>รหัส</th><th>ชื่อรายวิชา</th><th>ชม./ปี</th></tr>${D.courses.map((c, i) => `<tr><td>ป.${c.grade}</td><td><input value="${esc(c.code)}" data-sch="cc" data-i="${i}" style="width:90px"></td><td><input value="${esc(c.name)}" data-sch="cn" data-i="${i}"></td><td>${num(c.hours, `data-sch="ch" data-i="${i}"`)}</td></tr>`).join("")}</table></div>` : ""}</div></details></div>`;
+  schTotals();
+}
+document.addEventListener("change", (e) => {
+  const t = e.target; if (!t?.dataset?.sch || !SCH.data) return; const D = SCH.data, d = t.dataset, i = Number(d.i), v = t.value; D.draft = false;
+  if (d.sch === "t") (D.time[d.s] ??= [0, 0, 0, 0, 0, 0])[Number(d.g)] = Number(v) || 0;
+  else if (d.sch === "an") D.acts[i].name = v;
+  else if (d.sch === "ah") D.acts[i].h[Number(d.g)] = Number(v) || 0;
+  else if (d.sch === "cc") D.courses[i].code = v; else if (d.sch === "cn") D.courses[i].name = v; else if (d.sch === "ch") D.courses[i].hours = Number(v) || 0;
+  schTotals();
+});
+const schCtx = () => `หลักสูตร ${T1.curriculum} ระดับประถมศึกษา กลุ่มสาระ: ${S.subjects.map((x) => `${x.id}=${x.name}`).join(", ")}`;
+
 function renderT1Prev() {
   const box = $("#t1prev"); if (!box || !T1.ind) return;
   if (!T1.ind.length) {
@@ -1008,6 +1062,40 @@ async function checkKey(id) {
   KRES[id] = `<span style="color:${good ? "#2e7d32" : warn ? "var(--warn)" : "var(--red)"}"><b>${good ? "✓" : warn ? "!" : "✗"} ${esc(o.message || o.error || "ตรวจไม่สำเร็จ")}</b> <span class="muted">(${new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })})</span></span>`;
 }
 const actions = {
+  "sch-save": (b) => busy(b, async () => {
+    SCH.data.draft = false;
+    must(await sb.from("school_structures").upsert({ owner_id: S.user.id, curriculum_id: T1.curriculum, data: SCH.data, updated_at: new Date().toISOString() }, { onConflict: "owner_id,curriculum_id" }));
+    toast("บันทึกโครงสร้างหลักสูตรสถานศึกษาแล้ว", "ok"); renderSchool();
+  }),
+  "sch-reset1": () => { SCH.data.time = schDefTime(); SCH.data.draft = true; renderSchool(); },
+  "sch-act-add": () => { SCH.data.acts.push({ name: "กิจกรรมใหม่", h: [0, 0, 0, 0, 0, 0] }); renderSchool(); },
+  "sch-act-del": (b) => { SCH.data.acts.splice(Number(b.dataset.i), 1); renderSchool(); },
+  "sch-ai1": (b) => busy(b, async () => {
+    const inp = await readIn("sch1");
+    const out = await callAI(`กำหนดเวลาเรียนรายปี (ชั่วโมง/ปี) ของแต่ละกลุ่มสาระ ชั้น ป.1-ป.6 สำหรับ ${schCtx()}
+ค่าปัจจุบัน: ${JSON.stringify(SCH.data.time)}
+ใช้ตัวเลขที่ครูให้มาก่อน เติมเฉพาะที่ขาดโดยยึดกรอบเวลาเรียนของหลักสูตรแกนกลาง รวมกลุ่มสาระของแต่ละชั้นรวมกับกิจกรรมพัฒนาผู้เรียนแล้วไม่เกิน 1000 ชั่วโมง/ปี${withMaterial(inp.text)}
+ตอบ JSON: {"time":{"<รหัสกลุ่มสาระ>":[ป.1,ป.2,ป.3,ป.4,ป.5,ป.6]}}`, { files: inp.files });
+    if (!out.time) throw new Error("AI ตอบไม่ครบ ลองใหม่"); Object.entries(out.time).forEach(([k, v]) => { if (Array.isArray(v) && v.length === 6 && S.subjects.some((x) => String(x.id) === String(k))) SCH.data.time[k] = v.map((x) => Number(x) || 0); });
+    SCH.data.draft = true; renderSchool(); toast("AI ร่างเวลาเรียนแล้ว ตรวจก่อนกดบันทึก", "ok");
+  }),
+  "sch-ai2": (b) => busy(b, async () => {
+    const inp = await readIn("sch2");
+    const out = await callAI(`กำหนดกิจกรรมพัฒนาผู้เรียนและชั่วโมง/ปี ของชั้น ป.1-ป.6 ตาม ${schCtx()}
+กิจกรรมปัจจุบัน: ${JSON.stringify(SCH.data.acts)}
+ใช้ข้อมูลที่ครูให้ก่อน เติมที่ขาด ประกอบด้วยแนะแนว ลูกเสือ/เนตรนารี/ยุวกาชาด ชุมนุม กิจกรรมเพื่อสังคมและสาธารณประโยชน์ รวมไม่เกิน 120 ชั่วโมง/ปี${withMaterial(inp.text)}
+ตอบ JSON: {"acts":[{"name":"...","h":[ป.1,ป.2,ป.3,ป.4,ป.5,ป.6]}]}`, { files: inp.files });
+    if (!Array.isArray(out.acts) || !out.acts.length) throw new Error("AI ตอบไม่ครบ ลองใหม่");
+    SCH.data.acts = out.acts.map((a) => ({ name: String(a.name), h: [0, 1, 2, 3, 4, 5].map((g) => Number(a.h?.[g]) || 0) })); SCH.data.draft = true; renderSchool(); toast("AI ร่างกิจกรรมแล้ว ตรวจก่อนกดบันทึก", "ok");
+  }),
+  "sch-gen3": () => {
+    const old = new Map(SCH.data.courses.map((c) => [`${c.sid}|${c.grade}`, c]));
+    SCH.data.courses = [1, 2, 3, 4, 5, 6].flatMap((g) => S.subjects.filter((sj) => (SCH.data.time[sj.id]?.[g - 1] ?? 0) > 0).map((sj) => {
+      const o = old.get(`${sj.id}|${g}`); return { sid: sj.id, grade: g, code: o?.code ?? `${schLetter(sj.name)}1${g}101`, name: o?.name ?? sj.name, hours: SCH.data.time[sj.id][g - 1], type: "พื้นฐาน" };
+    }));
+    renderSchool(); toast("สร้างรายวิชาแล้ว ตรวจรหัสและชื่อ", "ok");
+  },
+
   "k-check": (b) => busy(b, async () => { await checkKey(b.dataset.id); await reloadKeys(); }),
   "k-check-all": (b) => busy(b, async () => { for (const k of S.keys.filter((x) => x.enabled)) await checkKey(k.id); await reloadKeys(); }),
   goto: (b) => go(b.dataset.tab),
