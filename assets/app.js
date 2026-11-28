@@ -553,13 +553,13 @@ async function render4() {
       <td>${p.seq}</td>
       <td><input data-pid="${p.id}" data-pf="title" value="${esc(p.title)}" style="min-width:180px"></td>
       <td><input data-pid="${p.id}" data-pf="hours" type="number" min="1" value="${p.hours}" style="width:64px"></td>
-      <td><div class="chips">${p.indicator_codes.map((c) => `<span class="chip">${esc(c.replace(/^\S+\s/, ""))}</span>`).join("")}</div></td>
+      <td><div class="chips">${p.indicator_codes.map((c) => `<span class="chip" title="${esc(c)}">${esc(c.replace(/^\S+\s/, ""))} <a href="#" data-act="t4-ind-rm" data-id="${p.id}" data-code="${esc(c)}" style="text-decoration:none;color:var(--red)">×</a></span>`).join("")}<button class="btn small" data-act="t4-ind-edit" data-id="${p.id}" title="เพิ่ม/ลดตัวชี้วัด">＋/－</button></div>${p.indicator_codes.length ? "" : '<div class="small" style="color:var(--red)">ยังไม่มีตัวชี้วัด</div>'}</td>
       <td><input data-pid="${p.id}" data-pf="planned_date" type="date" value="${p.planned_date ?? ""}"></td>
       <td><select data-pid="${p.id}" data-pf="status"><option value="draft" ${p.status !== "reviewed" ? "selected" : ""}>${planDone(p) ? "ร่างแล้ว" : "ว่าง/ร่าง"}</option><option value="reviewed" ${p.status === "reviewed" ? "selected" : ""}>ตรวจแล้ว</option></select></td>
       <td style="white-space:nowrap"><button class="btn small" data-act="t4-up" data-id="${p.id}" ${i === 0 ? "disabled" : ""}>↑</button> <button class="btn small" data-act="t4-down" data-id="${p.id}" ${i === S.plans.length - 1 ? "disabled" : ""}>↓</button> <button class="btn small primary" data-act="t4-pick" data-id="${p.id}">เขียนแผน →</button> <button class="btn small" data-act="t4-copy" data-id="${p.id}">คัดลอก</button> <button class="btn small danger" data-act="t4-del-id" data-id="${p.id}">ลบ</button></td></tr>`).join("") || '<tr><td colspan="7" class="muted">ยังไม่มีแผน</td></tr>'}
     <tr><td></td><td><b>รวม</b></td><td><b>${ph}/${S.unit.hours}</b></td><td colspan="4"></td></tr></table></div>`;
   const listHtml = `<div class="list">${S.plans.map((p) => `<details class="item" style="display:block"><summary style="cursor:pointer"><b>แผนที่ ${p.seq}</b> ${esc(p.title)} <span class="muted small">· ${p.hours} ชม. · ${stCls(p)}${p.planned_date ? " · " + p.planned_date : ""}</span></summary>
-      <div class="small" style="margin-top:8px"><div class="chips">${p.indicator_codes.map((c) => `<span class="chip">${esc(c)}</span>`).join("")}</div>
+      <div class="small" style="margin-top:8px"><div class="chips">${p.indicator_codes.map((c) => `<span class="chip">${esc(c)}</span>`).join("")}<button class="btn small" data-act="t4-ind-edit" data-id="${p.id}">＋/－ ตัวชี้วัด</button></div>
       <p><b>สาระสำคัญ:</b> ${esc(p.sections?.key_idea || "-")}</p><p><b>จุดประสงค์:</b> ${esc([p.sections?.objectives?.K, p.sections?.objectives?.P, p.sections?.objectives?.A].filter(Boolean).join(" | ") || "-")}</p>
       <div class="row"><button class="btn small primary" data-act="t4-pick" data-id="${p.id}">เขียนแผน →</button> <button class="btn small" data-act="t4-copy" data-id="${p.id}">คัดลอก</button> <button class="btn small danger" data-act="t4-del-id" data-id="${p.id}">ลบ</button></div></div></details>`).join("") || '<div class="muted">ยังไม่มีแผน</div>'}</div>`;
   el.innerHTML = `<div class="card accent"><h2>5 · หัวข้อแผนรายคาบ (ร่างเรื่องคร่าวๆ ก่อน)</h2>
@@ -1109,6 +1109,15 @@ const actions = {
     const row = must(await sb.from("lesson_plans").insert({ unit_id: S.unit.id, seq, title: "แผนใหม่", hours: 1, indicator_codes: S.unit.indicator_codes, sections: emptySections() }).select().single());
     await loadPlans(); S.plan = S.plans.find((p) => p.id === row.id); render4();
   }),
+  "t4-ind-rm": async (b, e) => { e?.preventDefault?.(); const p = S.plans.find((x) => x.id === b.dataset.id); if (!p) return;
+    must(await sb.from("lesson_plans").update({ indicator_codes: p.indicator_codes.filter((c) => c !== b.dataset.code) }).eq("id", p.id)); await loadPlans(); render4(); },
+  "t4-ind-edit": async (b) => { const p = S.plans.find((x) => x.id === b.dataset.id); if (!p) return;
+    const all = await courseIndicators(), inU = new Set(S.unit.indicator_codes), list = [...all.filter((i) => inU.has(i.code)), ...all.filter((i) => !inU.has(i.code))];
+    pickIndicators(list, p.indicator_codes, async (codes) => {
+      must(await sb.from("lesson_plans").update({ indicator_codes: codes }).eq("id", p.id));
+      const extra = codes.filter((c) => !inU.has(c));
+      if (extra.length) { S.unit.indicator_codes = [...S.unit.indicator_codes, ...extra]; must(await sb.from("units").update({ indicator_codes: S.unit.indicator_codes }).eq("id", S.unit.id)); toast(`เพิ่ม ${extra.length} ตัวชี้วัดนอกหน่วยเข้าหน่วยด้วย`, "ok"); }
+      await loadPlans(); render4(); }); },
   "t4-ind": async () => pickIndicators((await courseIndicators()).filter((i) => S.unit.indicator_codes.includes(i.code)), S.plan.indicator_codes, (codes) => { collectPlan(); S.plan.indicator_codes = codes; renderPlanEditor(); }),
   "t4-save": (b) => busy(b, async () => { collectPlan(); await savePlan(); toast("บันทึกแผนแล้ว", "ok"); render5(); }),
   "t4-del": async () => {
@@ -1408,7 +1417,7 @@ Object.assign(actions, {
 // global listeners
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-act]"); if (!b) return;
-  const fn = actions[b.dataset.act]; if (fn) fn(b);
+  const fn = actions[b.dataset.act]; if (fn) { if (b.tagName === "A") e.preventDefault(); fn(b, e); }
 });
 document.addEventListener("input", (e) => {
   const t = e.target;
