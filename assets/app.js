@@ -739,7 +739,7 @@ function mediaKitPanel(sec) {
   return `<div class="card" style="padding:10px;background:var(--panel2);margin-top:8px"><b class="small">พร้อมสร้าง — คัดลอกคำสั่งไปวางใน ChatGPT / Gemini</b>${kit.map((k, i) => `<div style="margin-top:8px;border-top:1px dashed var(--line,#d9d0b8);padding-top:6px"><b>${i + 1}. ${esc(k.name)}</b> <span class="pill ok">${esc(k.type)}</span>
     <label>คำสั่งสร้างสื่อ<textarea id="mkP${i}" rows="4" readonly>${esc(k.prompt)}</textarea></label>
     <div class="row"><button type="button" class="btn small primary" data-act="copy-text" data-t="mkP${i}">📋 คัดลอกคำสั่ง</button></div>
-    ${k.content ? `<label>เนื้อหาพร้อมใช้<textarea id="mkC${i}" rows="5" readonly>${esc(k.content)}</textarea></label><div class="row"><button type="button" class="btn small" data-act="copy-text" data-t="mkC${i}">📋 คัดลอกเนื้อหา</button><button type="button" class="btn small" data-act="t4-media-att" data-i="${i}">＋ ใส่เป็นเอกสารแนบท้ายแผน</button></div>` : ""}</div>`).join("")}</div>`;
+    <label class="small">ได้รูปจาก ChatGPT/Gemini แล้ว? แนบรูปที่นี่ จะต่อท้ายไฟล์ Word เป็นหน้าสุดท้าย<input type="file" accept="image/*" multiple data-mkimg="${i}"></label>${k.content ? `<label>เนื้อหาพร้อมใช้<textarea id="mkC${i}" rows="5" readonly>${esc(k.content)}</textarea></label><div class="row"><button type="button" class="btn small" data-act="copy-text" data-t="mkC${i}">📋 คัดลอกเนื้อหา</button><button type="button" class="btn small" data-act="t4-media-att" data-i="${i}">＋ ใส่เป็นเอกสารแนบท้ายแผน</button></div>` : ""}</div>`).join("")}</div>`;
 }
 async function renderPlanEditor() {
   const box = $("#t4edit"); if (!box) return;
@@ -1800,6 +1800,15 @@ boot();
 }
 
 // attach images to a worksheet (resized JPEG data URL stored in the plan)
+document.addEventListener("change", async (e) => {
+  const inp = e.target.closest?.("[data-mkimg]"); if (!inp || !S.plan || !inp.files.length) return;
+  try {
+    collectPlan(); const k = S.plan.sections.media_kit[Number(inp.dataset.mkimg)], atts = S.plan.sections.attachments;
+    let a = atts.find((x) => x.title === k.name && (x.images ?? []).length); if (!a) { a = { title: k.name, body: "", images: [] }; atts.push(a); }
+    for (const f of [...inp.files]) a.images.push(await imgToData(f, 1800));
+    await savePlan(); renderPlanEditor(); toast(`แนบรูปเป็นเอกสารแนบท้ายแผนแล้ว ${inp.files.length} รูป (ดูที่ข้อ 13 และพรีวิว)`, "ok");
+  } catch (err) { toast(err.message ?? String(err), "err"); }
+});
 async function imgToData(file, max = 1500) {
   const bmp = await createImageBitmap(file); const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
   const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
