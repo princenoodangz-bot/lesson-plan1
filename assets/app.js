@@ -2,7 +2,7 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 const { createClient } = await import(DEMO ? "./demo.js" : "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 import {
   withMaterial, stripQA, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8, TRAITS, SYSTEM_PROMPT,
-  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptWorksheetImage, promptWorksheetFromText, promptMediaKit, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
+  emptySections, BOOK_TEXTS, promptBookText, promptCore, promptGradeDesc, promptExtraDesc, promptReadStructure, promptFillMissing, promptPlanFill, promptWorksheet, promptWorksheetImage, promptWorksheetFromText, promptMediaKit, promptRubric, promptCurriculumDoc, promptStructure, promptKeyIdea, promptPlan, promptPlanTitles, promptField, promptAttachments,
 } from "./template.js";
 
 const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG;
@@ -734,6 +734,17 @@ function wsPanel(a, i) {
     <div class="row"><button type="button" class="btn small primary" data-act="copy-text" data-t="wsKey${i}">📋 คัดลอกเฉลย</button>
       <button type="button" class="btn small" data-act="t4-ws-key" data-i="${i}">＋ ใส่เฉลยเป็นเอกสารแนบท้ายแผน</button></div></div>`;
 }
+const RUB_NAMES = ["พุทธิพิสัย (K)", "ทักษะ/กระบวนการ (P)", "จิตพิสัย (A)", "คุณลักษณะอันพึงประสงค์"];
+const rubName = (sec, i) => sec.assessment?.[i]?.item || RUB_NAMES[i] || `รายการที่ ${i + 1}`;
+const rubTitle = (sec, i) => `เกณฑ์การประเมิน${rubName(sec, i)}`;
+function rubricSection(sec, i) {
+  sec.rubric ??= []; sec.rubric[i] ??= ""; const att = (sec.attachments ?? []).some((a) => a.title === rubTitle(sec, i)), as = sec.assessment?.[i] ?? {};
+  return `<details class="sec" ${sec.rubric[i] ? "open" : ""}><summary>${14 + i}. เกณฑ์การประเมิน: ${esc(rubName(sec, i))} ${att ? '<span class="pill ok">แนบ Word แล้ว</span>' : sec.rubric[i] ? '<span class="pill warn">ยังไม่แนบ Word</span>' : ""}</summary><div class="body">
+    <div class="muted small">วิธีวัด: ${esc(as.method || "-")} · เครื่องมือ: ${esc(as.tool || "-")}</div>
+    <label>ตารางเกณฑ์ (คั่นช่องด้วย | บรรทัดแรกเป็นหัวตาราง)<textarea data-p="rubric.${i}" rows="9" placeholder="กด AI เขียนเกณฑ์ หรือพิมพ์เอง">${esc(sec.rubric[i])}</textarea></label>
+    <div class="row"><button type="button" class="btn small accent" data-act="t4-rub-ai" data-i="${i}">✨ AI เขียนเกณฑ์ข้อนี้</button>${i === 0 ? '<button type="button" class="btn small accent" data-act="t4-rub-ai" data-i="all">✨ AI เขียนทุกรายการ</button>' : ""}<button type="button" class="btn small primary" data-act="t4-rub-att" data-i="${i}">＋ แนบต่อท้ายไฟล์ Word</button></div>
+    <div class="muted small">แก้เกณฑ์แล้วกด "แนบ" อีกครั้งเพื่ออัปเดตในไฟล์ Word</div></div></details>`;
+}
 function mediaKitPanel(sec) {
   const kit = sec.media_kit ?? []; if (!kit.length) return "";
   return `<div class="card" style="padding:10px;background:var(--panel2);margin-top:8px"><b class="small">พร้อมสร้าง — คัดลอกคำสั่งไปวางใน ChatGPT / Gemini</b>${kit.map((k, i) => `<div style="margin-top:8px;border-top:1px dashed var(--line,#d9d0b8);padding-top:6px"><b>${i + 1}. ${esc(k.name)}</b> <span class="pill ok">${esc(k.type)}</span>
@@ -790,7 +801,8 @@ async function renderPlanEditor() {
         <button class="btn small danger" data-act="t4-att-del" data-i="${i}">ลบเอกสารนี้</button></div>`).join("") || '<div class="muted">ยังไม่มีเอกสารแนบ</div>'}
       <div class="card" style="padding:10px;border-style:dashed"><b class="small">🧾 สร้างใบงาน (ข้อความ + คำสั่งสร้างรูป + เฉลย)</b><div class="row" style="margin-top:6px"><label class="small" style="flex-direction:row;gap:6px;align-items:center">จำนวนข้อ<input type="number" id="wsN" value="7" min="3" max="12" style="width:70px"></label><label class="small" style="flex-direction:row;gap:6px;align-items:center">สี<select id="wsTheme" style="width:auto"><option value="blue">ฟ้า</option><option value="pink">ชมพู</option><option value="green">เขียว</option><option value="orange">ส้ม</option><option value="purple">ม่วง</option></select></label><input id="wsExtra" placeholder="ข้อความเพิ่มเติม (ถ้ามี) เช่น เน้นข้อวาดภาพ" style="flex:1;min-width:180px"><button class="btn small primary" data-act="t4-ws">✨ สร้างใบงาน</button></div></div>
       <div class="row"><button class="btn small" data-act="t4-att-add">+ เพิ่มเอกสารแนบ</button><button class="btn small accent" data-act="t4-att-ai">✨ AI ร่างใบงาน + รูบริก</button></div></div></details>
-    <details class="sec" ${(sec.media_kit ?? []).length ? "open" : ""}><summary>14. สื่อพร้อมสร้าง / พร้อมใช้งาน <span class="muted small">— คำสั่งคัดลอกไปสร้างสื่อ + แนบรูปที่ได้ต่อท้าย Word</span></summary><div class="body">
+    ${(sec.assessment ?? []).map((_, i) => rubricSection(sec, i)).join("")}
+    <details class="sec" ${(sec.media_kit ?? []).length ? "open" : ""}><summary>${14 + (sec.assessment ?? []).length}. พร้อมสร้างสื่อการสอน <span class="muted small">— คำสั่งคัดลอกไปสร้างสื่อ + แนบรูปที่ได้ต่อท้าย Word</span></summary><div class="body">
       <p class="muted small">ระบบอ่านรายการสื่อในข้อ 10 แล้วเตรียมคำสั่งให้ทีละชิ้น คัดลอกไปสร้างใน ChatGPT/Gemini แล้วนำรูปที่ได้มาแนบกลับที่นี่</p>
       <div class="row"><button type="button" class="btn small accent" data-act="t4-media-kit">📋 เตรียมคำสั่งสร้างสื่อทุกชิ้น (คัดลอกไปสร้าง)</button></div>${mediaKitPanel(sec)}</div></details>
     <div class="row" style="margin-top:10px"><button class="btn primary" data-act="t4-save">บันทึกแผนนี้</button><button class="btn" data-act="t4-save-next">บันทึกและไปแผนถัดไป →</button></div>
@@ -1082,13 +1094,27 @@ async function checkKey(id) {
   KRES[id] = `<span style="color:${good ? "#2e7d32" : warn ? "var(--warn)" : "var(--red)"}"><b>${good ? "✓" : warn ? "!" : "✗"} ${esc(o.message || o.error || "ตรวจไม่สำเร็จ")}</b> <span class="muted">(${new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })})</span></span>`;
 }
 const actions = {
+  "t4-rub-ai": (b) => busy(b, async () => {
+    collectPlan(); const c = S.course, all = await courseIndicators(), sec = S.plan.sections, which = b.dataset.i === "all" ? sec.assessment.map((_, k) => k) : [Number(b.dataset.i)];
+    const out = await callAI(promptRubric({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: S.plan, indicators: all.filter((i) => S.plan.indicator_codes.includes(i.code)), assessment: sec.assessment, which }));
+    if (!Array.isArray(out.rubrics) || !out.rubrics.length) throw new Error("AI ตอบไม่ครบ ลองใหม่");
+    sec.rubric ??= []; let n = 0;
+    out.rubrics.forEach((r) => { const k = Number(r.index); if (which.includes(k) && r.table) { sec.rubric[k] = stripQA(Array.isArray(r.table) ? r.table.join("\n") : r.table); n++; } });
+    if (!n) throw new Error("AI ตอบไม่ตรงรายการ ลองใหม่"); await savePlan(); renderPlanEditor(); toast(`AI เขียนเกณฑ์ ${n} รายการแล้ว ตรวจแล้วกด "แนบต่อท้ายไฟล์ Word"`, "ok");
+  }),
+  "t4-rub-att": (b) => busy(b, async () => {
+    collectPlan(); const sec = S.plan.sections, i = Number(b.dataset.i), body = String(sec.rubric?.[i] ?? "").trim();
+    if (!body) throw new Error("ยังไม่มีเกณฑ์ในข้อนี้ กด AI เขียนเกณฑ์ก่อน"); const title = rubTitle(sec, i), ex = sec.attachments.find((a) => a.title === title);
+    if (ex) { ex.body = body; ex.images = ex.images ?? []; } else sec.attachments.push({ title, body });
+    await savePlan(); renderPlanEditor(); toast("แนบเกณฑ์ต่อท้ายไฟล์ Word แล้ว (ดูที่ข้อ 13 และพรีวิว)", "ok");
+  }),
   "t4-media-kit": (b) => busy(b, async () => {
     collectPlan(); const c = S.course, all = await courseIndicators(), media = S.plan.sections.media;
     if (!String(media ?? "").trim()) throw new Error("ช่องสื่อการเรียนการสอนยังว่าง ใส่รายการสื่อก่อน หรือกด AI เขียนหัวข้อนี้ใหม่");
     const out = await callAI(promptMediaKit({ subject: subjName(c.subject_id), grade: c.grade, unit: S.unit, plan: S.plan, indicators: all.filter((i) => S.plan.indicator_codes.includes(i.code)), media }));
     if (!Array.isArray(out.items) || !out.items.length) throw new Error("AI ตอบไม่ครบ ลองใหม่");
     S.plan.sections.media_kit = out.items.map((x) => ({ name: String(x.name ?? ""), type: String(x.type ?? "อื่นๆ"), content: stripQA(x.content ?? ""), prompt: String(x.prompt ?? "") }));
-    await savePlan(); renderPlanEditor(); toast("เตรียมคำสั่งสร้างสื่อแล้ว ดูที่ข้อ 14", "ok");
+    await savePlan(); renderPlanEditor(); toast("เตรียมคำสั่งสร้างสื่อแล้ว ดูที่ข้อสุดท้าย (พร้อมสร้างสื่อการสอน)", "ok");
   }),
   "t4-media-att": (b) => busy(b, async () => {
     collectPlan(); const k = S.plan.sections.media_kit[Number(b.dataset.i)];
@@ -1528,7 +1554,7 @@ function planFromOut0(out, prev, base, lines) {
     sufficiency: { ...base.sufficiency, ...out.sufficiency },
     resources: { inside: lines(out.resources?.inside), outside: lines(out.resources?.outside) || "-", local: lines(out.resources?.local) || "-" },
     focus: prev.focus ?? base.focus,
-    attachments: prev.attachments ?? [], media_kit: prev.media_kit ?? [],
+    attachments: prev.attachments ?? [], media_kit: prev.media_kit ?? [], rubric: prev.rubric ?? [],
     process: Array.from({ length: 5 }, (_, i) => String(out.process?.[i] ?? "")),
     content: lines(out.content), media: lines(out.media), traits: (out.traits ?? []).filter((t) => TRAITS.includes(t)),
     assessment: base.assessment.map((a, i) => ({ ...a, ...(out.assessment?.[i] ?? {}), item: a.item })),
@@ -1809,7 +1835,7 @@ document.addEventListener("change", async (e) => {
     collectPlan(); const k = S.plan.sections.media_kit[Number(inp.dataset.mkimg)], atts = S.plan.sections.attachments;
     let a = atts.find((x) => x.title === k.name && (x.images ?? []).length); if (!a) { a = { title: k.name, body: "", images: [] }; atts.push(a); }
     for (const f of [...inp.files]) a.images.push(await imgToData(f, 1800));
-    await savePlan(); renderPlanEditor(); toast(`แนบรูปเป็นเอกสารแนบท้ายแผนแล้ว ${inp.files.length} รูป (ดูที่ข้อ 13/14 และพรีวิว)`, "ok");
+    await savePlan(); renderPlanEditor(); toast(`แนบรูปเป็นเอกสารแนบท้ายแผนแล้ว ${inp.files.length} รูป (ดูที่ข้อ 13 และพรีวิว)`, "ok");
   } catch (err) { toast(err.message ?? String(err), "err"); }
 });
 async function imgToData(file, max = 1500) {
