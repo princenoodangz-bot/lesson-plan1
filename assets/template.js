@@ -415,3 +415,17 @@ ${nextNo}. ชื่อกิจกรรมสั้น ๆ: ครูทำ...
 - ตัวอย่างคำตอบของนักเรียน: "..."
 ตอบ JSON เท่านั้น: {"text":"ข้อความของกิจกรรมใหม่ ใช้ \\n แยกบรรทัด"}`;
 }
+
+// each attachment -> separate sheets (A4 pages): a body containing a line starting "เฉลย" is split so the key gets its own page
+export function attachmentSheets(list) {
+  const out = [];
+  (list ?? []).forEach((a) => {
+    if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim() && !(a.images ?? []).length) return;
+    const L = String(a.body ?? "").split(/\r?\n/), k = L.findIndex((l, i) => i > 0 && /^\s*(เฉลย|แนวคำตอบ)/.test(l)) ;
+    if (k > 0 && L.slice(0, k).join("").trim() && !(a.images ?? []).length && !/^เฉลย/.test(a.title ?? "")) {
+      out.push({ ...a, body: L.slice(0, k).join("\n") });
+      out.push({ ...a, title: `เฉลย ${a.title ?? ""}`, body: L.slice(k).join("\n"), images: [] });
+    } else out.push(a);
+  });
+  return out;
+}

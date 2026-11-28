@@ -1,5 +1,5 @@
 // Paper-style preview of one lesson plan, laid out like the school's original template (12 sections).
-import { lineKind, parseAttachment, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
+import { lineKind, parseAttachment, attachmentSheets, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const lines = (v) => (Array.isArray(v) ? v : String(v ?? "").split(/\r?\n/)).map((l) => String(l).trim()).filter(Boolean);
@@ -91,8 +91,7 @@ export function planPreviewHtml(ctx, plan) {
   out.push(`<p class="b ind0">ความเห็นของรองผู้อำนวยการโรงเรียน</p>`, dl(), dl(), sign("", ctx.deputy, `รองผู้อำนวยการ${ctx.school ?? ""}`));
   out.push(`<p class="b ind0">ความเห็นของผู้อำนวยการโรงเรียน</p>`, dl(), dl(), sign("", ctx.director, `ผู้อำนวยการ${ctx.school ?? ""}`));
 
-  (sec.attachments ?? []).forEach((a, i) => {
-    if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim() && !(a.images ?? []).length) return;
+  attachmentSheets(sec.attachments).forEach((a, i) => {
     out.push(`<hr><h3 class="c">เอกสารแนบที่ ${i + 1} ${esc(a.title)}</h3>${(a.images ?? []).length ? "" : parseAttachment(a.body).map((b) => b.t === "tbl" ? `<table class="pt"><tr>${b.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>${b.rows.map((r) => `<tr>${r.map((c, k) => `<td${k === 0 && b.head.length === 3 ? ' class="c"' : ""}>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>` : b.t === "dots" ? `<div class="dots"></div>` : P(b.text, "ind0")).join("")}${(a.images ?? []).map((m) => `<img src="${m.data}" alt="" style="width:100%;display:block;margin:8px 0">`).join("")}`);
   });
   const html = out.join("").replace(/>([^<]*)</g, (m, t) => ">" + th(t) + "<");

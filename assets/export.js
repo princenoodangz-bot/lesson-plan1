@@ -1,6 +1,6 @@
 // Word (.docx) export that follows the school's original plan layout:
 // A4, margins L3.17 R1.75 T2.30 B1.50 cm, TH SarabunIT๙ 16.5/16 pt, 12 numbered sections, 4-column assessment table.
-import { lineKind, parseAttachment, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
+import { lineKind, parseAttachment, attachmentSheets, SECTIONS, PROCESS_STEPS, SUFFICIENCY, R3, C8 } from "./template.js";
 
 const DOCX_CDN = "https://cdn.jsdelivr.net/npm/docx@9.16.1/+esm";
 const FONT = "TH SarabunIT๙";
@@ -164,8 +164,7 @@ export async function buildDoc(ctx, plans) {
     out.push(para("ความเห็นของผู้อำนวยการโรงเรียน", { bold: true, indent: { left: cm(0.6) }, before: 160 })); out.push(dl()); out.push(dl());
     sign("", ctx.director, `ผู้อำนวยการ${sch}`);
     // attachments (worksheets / rubric)
-    (sec.attachments ?? []).forEach((a, ai) => {
-      if (!String(a.title ?? "").trim() && !String(a.body ?? "").trim() && !(a.images ?? []).length) return;
+    attachmentSheets(sec.attachments).forEach((a, ai) => {
       const zs = a.compact ? (String(a.body ?? "").split("\n").length > 20 ? 21 : 24) : undefined;
       out.push(para(`เอกสารแนบที่ ${ai + 1}  ${a.title ?? ""}`, { bold: true, align: AlignmentType.CENTER, pageBreakBefore: true, line: 240, size: zs }));
       ((a.images ?? []).length ? [] : parseAttachment(a.body)).forEach((b) => {
